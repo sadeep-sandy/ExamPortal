@@ -411,8 +411,7 @@ function startExam() {
   document.getElementById('examTitle').textContent=`Salesforce Test — Set ${set}`;
   document.getElementById('candidateBadge').textContent=name;
   showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer();
-  // Request fullscreen first, then start camera, then enable proctoring AFTER camera resolves
-  try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}catch(e){}
+  // Start camera FIRST, then go fullscreen AFTER permission is handled
   setupProctoring();
 }
 
@@ -457,8 +456,10 @@ async function startCamera() {
     console.warn('Camera denied:', err);
     document.getElementById('camDenied').style.display = 'block';
   }
-  // Enable violation detection AFTER camera permission is handled
-  state.proctoringActive = true;
+  // Go fullscreen AFTER camera permission is resolved (no popup conflict)
+  try { await document.documentElement.requestFullscreen(); } catch(e) {}
+  // Enable violation detection AFTER both camera and fullscreen are done
+  setTimeout(function(){ state.proctoringActive = true; }, 1000);
 }
 
 function takeSnapshot() {

@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salesforce Training Assessment</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --accent: #3b7fff;
+    --accent2: #60a5fa;
+    --text: #f0f4ff;
+    --text2: #8b9ab5;
+    --text3: #4a5568;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; -webkit-user-select: none; user-select: none; }
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; }
+
+  #loginScreen { align-items: center; justify-content: center; flex-direction: column; padding: 2rem; position: relative; overflow: hidden; }
+  #loginScreen::before { content: ''; position: absolute; width: 600px; height: 600px; background: radial-gradient(circle, rgba(59,127,255,0.08) 0%, transparent 70%); top: -100px; left: -100px; pointer-events: none; }
+  .login-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 20px; padding: 3rem; width: 100%; max-width: 480px; position: relative; z-index: 1; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 2.5rem; }
+  .brand-icon { width: 44px; height: 44px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  .brand-icon svg { width: 22px; height: 22px; fill: none; stroke: white; stroke-width: 2; }
+  .brand-text { font-size: 18px; font-weight: 600; }
+  .brand-sub { font-size: 13px; color: var(--text2); }
+  .login-title { font-size: 26px; font-weight: 600; margin-bottom: 8px; }
+  .login-sub { font-size: 14px; color: var(--text2); margin-bottom: 2rem; line-height: 1.6; }
+  .form-group { margin-bottom: 1.25rem; }
+  .form-label { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 6px; display: block; text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-input { width: 100%; padding: 12px 16px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none; transition: border-color 0.2s; }
+  .form-input:focus { border-color: var(--accent); }
+  .form-select { width: 100%; padding: 12px 16px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none; cursor: pointer; appearance: none; }
+  .btn-primary { width: 100%; padding: 14px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; margin-top: 0.5rem; }
+  .btn-primary:hover { opacity: 0.9; }
+  .rules-box { background: rgba(59,127,255,0.06); border: 1px solid rgba(59,127,255,0.2); border-radius: var(--radius-sm); padding: 1rem 1.25rem; margin-top: 1.5rem; }
+  .rules-title { font-size: 12px; font-weight: 600; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .rules-list { list-style: none; }
+  .rules-list li { font-size: 13px; color: var(--text2); padding: 3px 0; display: flex; gap: 8px; }
+  .rules-list li::before { content: '–'; color: var(--accent); flex-shrink: 0; }
+
+  #examScreen { flex-direction: column; }
+  .exam-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 64px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .exam-info { display: flex; align-items: center; gap: 20px; }
+  .exam-title { font-size: 15px; font-weight: 600; }
+  .badge { background: rgba(59,127,255,0.15); color: var(--accent2); font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; }
+  .exam-controls { display: flex; align-items: center; gap: 16px; }
+  .timer { background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 8px 16px; font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--text); min-width: 90px; text-align: center; }
+  .timer.warning { color: var(--warning); border-color: rgba(245,158,11,0.3); }
+  .timer.danger { color: var(--danger); border-color: rgba(239,68,68,0.3); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  .violation-badge { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; font-size: 12px; padding: 4px 10px; border-radius: 20px; }
+  .btn-submit { background: var(--success); color: white; border: none; border-radius: var(--radius-sm); padding: 8px 20px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .btn-submit:hover { opacity: 0.85; }
+
+  .exam-body { display: flex; flex: 1; max-width: 1100px; margin: 0 auto; width: 100%; padding: 2rem; gap: 2rem; }
+  .question-panel { flex: 1; }
+  .sidebar { width: 240px; flex-shrink: 0; }
+  .progress-bar-wrap { background: var(--surface2); border-radius: 4px; height: 4px; margin-bottom: 2rem; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--accent); transition: width 0.3s; border-radius: 4px; }
+  .section-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem; }
+  .q-number { font-size: 13px; color: var(--text2); margin-bottom: 0.5rem; font-family: 'DM Mono', monospace; }
+  .q-text { font-size: 17px; font-weight: 500; line-height: 1.65; margin-bottom: 1.75rem; color: var(--text); }
+  .options { display: flex; flex-direction: column; gap: 10px; }
+  .option { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 14px; transition: border-color 0.15s, background 0.15s; font-size: 15px; line-height: 1.5; }
+  .option:hover { border-color: var(--border2); background: var(--surface); }
+  .option.selected { border-color: var(--accent); background: rgba(59,127,255,0.08); }
+  .option-letter { width: 28px; height: 28px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--text2); flex-shrink: 0; transition: all 0.15s; }
+  .option.selected .option-letter { background: var(--accent); border-color: var(--accent); color: white; }
+  .textarea-input { width: 100%; min-height: 180px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 16px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; line-height: 1.6; resize: vertical; outline: none; transition: border-color 0.2s; -webkit-user-select: text; user-select: text; }
+  .textarea-input:focus { border-color: var(--accent); }
+  .scenario-box { background: rgba(59,127,255,0.05); border: 1px solid rgba(59,127,255,0.15); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; font-size: 14px; color: var(--text2); line-height: 1.7; }
+  .nav-row { display: flex; justify-content: space-between; margin-top: 2rem; gap: 12px; }
+  .btn-nav { background: var(--surface2); border: 1px solid var(--border2); color: var(--text); border-radius: var(--radius-sm); padding: 10px 24px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+  .btn-nav:hover { background: var(--surface); }
+  .btn-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-nav.primary { background: var(--accent); border-color: var(--accent); }
+  .btn-nav.primary:hover { opacity: 0.85; }
+
+  .sidebar-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+  .sidebar-title { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .q-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .q-dot { aspect-ratio: 1; border-radius: 6px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text3); cursor: pointer; transition: all 0.15s; }
+  .q-dot.answered { background: rgba(59,127,255,0.15); border-color: rgba(59,127,255,0.3); color: var(--accent2); }
+  .q-dot.current { background: var(--accent); border-color: var(--accent); color: white; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 13px; color: var(--text2); }
+  .stat-val { font-size: 13px; font-weight: 500; font-family: 'DM Mono', monospace; }
+
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 2rem; }
+  .overlay.show { display: flex; }
+  .overlay-card { background: var(--surface); border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; padding: 2.5rem; max-width: 440px; width: 100%; text-align: center; }
+  .overlay-icon { width: 60px; height: 60px; background: rgba(239,68,68,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 28px; }
+  .overlay-title { font-size: 22px; font-weight: 600; margin-bottom: 12px; }
+  .overlay-text { font-size: 14px; color: var(--text2); line-height: 1.6; margin-bottom: 1.5rem; }
+  .btn-warning { background: var(--danger); color: white; border: none; border-radius: var(--radius-sm); padding: 12px 28px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; }
+
+  /* SUBMITTING OVERLAY */
+  #submittingOverlay .overlay-card { border-color: rgba(59,127,255,0.3); }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1.5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #resultScreen { align-items: center; justify-content: center; flex-direction: column; padding: 2rem; }
+  .result-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 20px; padding: 3rem; width: 100%; max-width: 620px; }
+  .result-header { text-align: center; margin-bottom: 2.5rem; }
+  .score-circle { width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-direction: column; margin: 0 auto 1.5rem; font-weight: 700; border: 3px solid; }
+  .score-circle.pass { border-color: var(--success); background: rgba(16,185,129,0.08); color: var(--success); }
+  .score-circle.fail { border-color: var(--danger); background: rgba(239,68,68,0.08); color: var(--danger); }
+  .score-num { font-size: 32px; font-family: 'DM Mono', monospace; }
+  .score-label { font-size: 12px; opacity: 0.7; margin-top: 2px; }
+  .result-title { font-size: 24px; font-weight: 600; }
+  .result-sub { font-size: 14px; color: var(--text2); margin-top: 6px; }
+  .result-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 2rem; }
+  .result-stat { background: var(--surface2); border-radius: var(--radius); padding: 1rem 1.25rem; }
+  .rs-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .rs-val { font-size: 20px; font-weight: 600; font-family: 'DM Mono', monospace; }
+  .rs-val.green { color: var(--success); }
+  .rs-val.red { color: var(--danger); }
+  .rs-val.yellow { color: var(--warning); }
+  .sheet-status { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 1.5rem; }
+  .sheet-status.sending { background: rgba(59,127,255,0.08); border: 1px solid rgba(59,127,255,0.2); color: var(--accent2); }
+  .sheet-status.sent { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: #6ee7b7; }
+  .sheet-status.failed { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; }
+  .answers-section { margin-top: 1.5rem; }
+  .answers-title { font-size: 14px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; }
+  .answer-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .answer-row:last-child { border-bottom: none; }
+  .ans-q { color: var(--text2); flex: 1; padding-right: 10px; }
+  .ans-correct { color: var(--success); font-weight: 500; white-space: nowrap; }
+  .ans-wrong { color: var(--danger); font-weight: 500; white-space: nowrap; }
+  .ans-skip { color: var(--text3); white-space: nowrap; }
+  .violation-warning { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: #fca5a5; margin-top: 1rem; text-align: center; }
+
+  /* Camera proctoring */
+  .camera-box { position: fixed; bottom: 20px; right: 20px; z-index: 200; border-radius: var(--radius); overflow: hidden; border: 2px solid var(--border2); background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .camera-box video { width: 180px; height: 135px; object-fit: cover; display: block; }
+  .camera-box .cam-label { position: absolute; top: 6px; left: 8px; font-size: 10px; font-weight: 600; color: white; background: rgba(239,68,68,0.8); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+  .camera-box .cam-dot { width: 6px; height: 6px; background: white; border-radius: 50%; animation: pulse 1.5s infinite; }
+  .camera-box canvas { display: none; }
+  .cam-denied { position: fixed; bottom: 20px; right: 20px; z-index: 200; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: #fca5a5; }
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="loginScreen" class="screen active">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+      </div>
+      <div>
+        <div class="brand-text">Salesforce Training</div>
+        <div class="brand-sub">Assessment Portal</div>
+      </div>
+    </div>
+    <div class="login-title">Start Your Test</div>
+    <div class="login-sub">Enter your details and select a test set. The exam is timed and proctored.</div>
+    <div class="form-group">
+      <label class="form-label">Full Name</label>
+      <input type="text" id="candidateName" class="form-input" placeholder="Enter your full name" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email Address</label>
+      <input type="email" id="candidateEmail" class="form-input" placeholder="your@email.com" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Test Set</label>
+      <select id="setSelector" class="form-select">
+        <option value="">— Select a set —</option>
+      </select>
+    </div>
+    <button class="btn-primary" onclick="startExam()">Begin Exam</button>
+    <div class="rules-box">
+      <div class="rules-title">Exam Rules</div>
+      <ul class="rules-list">
+        <li>Duration: 45 minutes — auto-submits when time runs out</li>
+        <li>Tab switching is monitored — 1st violation = warning</li>
+        <li>2nd tab switch will auto-submit your exam immediately</li>
+        <li>Right-click and DevTools are disabled</li>
+        <li>Results are automatically sent to the interviewer</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EXAM ===================== -->
+<div id="examScreen" class="screen">
+  <div class="exam-header">
+    <div class="exam-info">
+      <div class="exam-title" id="examTitle">Salesforce Test</div>
+      <div class="badge" id="candidateBadge">Candidate</div>
+    </div>
+    <div class="exam-controls">
+      <div class="violation-badge" id="violationBadge">Violations: 0</div>
+      <div class="timer" id="timer">45:00</div>
+      <button class="btn-submit" onclick="confirmSubmit()">Submit Exam</button>
+    </div>
+  </div>
+  <div class="exam-body">
+    <div class="question-panel">
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div id="questionContent"></div>
+      <div class="nav-row">
+        <button class="btn-nav" id="prevBtn" onclick="navigate(-1)">← Previous</button>
+        <button class="btn-nav primary" id="nextBtn" onclick="navigate(1)">Next →</button>
+      </div>
+    </div>
+    <div class="sidebar">
+      <div class="sidebar-card">
+        <div class="sidebar-title">Questions</div>
+        <div class="q-grid" id="qGrid"></div>
+      </div>
+      <div class="sidebar-card">
+        <div class="sidebar-title">Progress</div>
+        <div class="stat-row"><span class="stat-label">Answered</span><span class="stat-val" id="statAnswered">0</span></div>
+        <div class="stat-row"><span class="stat-label">Remaining</span><span class="stat-val" id="statRemaining">23</span></div>
+        <div class="stat-row"><span class="stat-label">MCQ</span><span class="stat-val" id="statMCQ">0/20</span></div>
+        <div class="stat-row"><span class="stat-label">Scenario</span><span class="stat-val" id="statScenario">0/2</span></div>
+      </div>
+    </div>
+  </div>
+  <!-- Camera proctoring -->
+  <div class="camera-box" id="cameraBox" style="display:none;">
+    <div class="cam-label"><div class="cam-dot"></div> REC</div>
+    <video id="camVideo" autoplay muted playsinline></video>
+    <canvas id="camCanvas"></canvas>
+  </div>
+  <div class="cam-denied" id="camDenied" style="display:none;">Camera access denied — proctoring disabled</div>
+</div>
+
+<!-- ===================== RESULT ===================== -->
+<div id="resultScreen" class="screen">
+  <div class="result-card">
+    <div class="result-header">
+      <div class="score-circle" id="scoreCircle">
+        <div class="score-num" id="scoreNum">0</div>
+        <div class="score-label" id="scoreDenom">/ 20</div>
+      </div>
+      <div class="result-title" id="resultTitle">Test Complete</div>
+      <div class="result-sub" id="resultSub"></div>
+    </div>
+    <div id="sheetStatus" class="sheet-status sending">
+      <div class="spinner" style="width:16px;height:16px;border-width:2px;margin:0;flex-shrink:0;"></div>
+      <span>Sending results to interviewer...</span>
+    </div>
+    <div class="result-stats">
+      <div class="result-stat"><div class="rs-label">Correct Answers</div><div class="rs-val green" id="rsCorrect">0</div></div>
+      <div class="result-stat"><div class="rs-label">Wrong Answers</div><div class="rs-val red" id="rsWrong">0</div></div>
+      <div class="result-stat"><div class="rs-label">Skipped</div><div class="rs-val yellow" id="rsSkipped">0</div></div>
+      <div class="result-stat"><div class="rs-label">Score %</div><div class="rs-val" id="rsPercent">0%</div></div>
+    </div>
+    <div class="answers-section">
+      <div class="answers-title">MCQ Review</div>
+      <div id="answerReview"></div>
+    </div>
+    <div id="violationResult"></div>
+  </div>
+</div>
+
+<!-- OVERLAYS -->
+<div class="overlay" id="warningOverlay">
+  <div class="overlay-card">
+    <div class="overlay-icon">⚠️</div>
+    <div class="overlay-title">Tab Switch Detected</div>
+    <div class="overlay-text">You have switched away from the exam. This is your <strong>first and final warning</strong>.<br><br>Switching again will immediately auto-submit your exam.</div>
+    <button class="btn-warning" onclick="dismissWarning()">I Understand — Return to Exam</button>
+  </div>
+</div>
+
+<div class="overlay" id="autoSubmitOverlay">
+  <div class="overlay-card">
+    <div class="overlay-icon">🚫</div>
+    <div class="overlay-title">Exam Auto-Submitted</div>
+    <div class="overlay-text">You switched tabs a second time. Your exam has been automatically submitted.</div>
+    <button class="btn-warning" onclick="finalizeAndShow()">View Results</button>
+  </div>
+</div>
+
+<div class="overlay" id="submittingOverlay">
+  <div class="overlay-card" style="border-color:rgba(59,127,255,0.3);">
+    <div class="spinner"></div>
+    <div class="overlay-title">Submitting Exam...</div>
+    <div class="overlay-text">Please wait while your answers are being saved. Do not close this window.</div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (for saving results)
+// ================================================================
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbzuz9ywWxA_pTvbTeAc-kPbdNEBlt_Jl6FlztmtF6RN8wpr-rGYsFA-8i-DGvIWUsov/exec";
+// ================================================================
+
+const EXAM_DURATION = 45 * 60;
+
+// ================================================================
+// PASTE YOUR GOOGLE SHEET ID HERE
+// How to get it: Open your Google Sheet → look at the URL:
+// https://docs.google.com/spreadsheets/d/THIS_PART_IS_THE_ID/edit
+// Copy that ID and paste below.
+// The sheet must be shared: Share → Anyone with the link → Viewer
+// ================================================================
+const SHEET_ID = "170lsPmerJe9V_TGtPkUfUXPixXH3oh5cYXeYN5iBVjY";
+// ================================================================
+
+let QUESTIONS = {};
+
+function letterToIndex(letter) {
+  return 'ABCD'.indexOf((letter || 'A').toString().trim().toUpperCase());
+}
+
+// Fallback questions (used if live fetch fails on file://)
+const QUESTION_DATA = {"A":{"mcq":[{"question":"Which of the following is an example of SaaS?","options":["AWS EC2","Microsoft Azure","Gmail","Google Compute Engine"],"answer":"C"},{"question":"What is the primary purpose of Governor Limits in Salesforce?","options":["To restrict admin access","To ensure fair resource usage in multi-tenant architecture","To limit the number of users per org","To prevent API integrations"],"answer":"B"},{"question":"Which Salesforce edition is best suited for developers to build and test apps for free?","options":["Essentials","Professional","Unlimited","Developer"],"answer":"D"},{"question":"What suffix is used for custom object API names in Salesforce?","options":["__r","__x","__c","__s"],"answer":"C"},{"question":"Which field type automatically calculates a value based on other fields?","options":["Auto-Number","Roll-Up Summary","Formula","Text"],"answer":"C"},{"question":"In a Master-Detail relationship, what happens to child records when the parent is deleted?","options":["Child records become orphaned","Child records are archived","Child records are also deleted","Child records are reassigned"],"answer":"C"},{"question":"Which relationship type is ONLY available on the User object?","options":["Self Relationship","Hierarchical Relationship","External Lookup","Indirect Lookup"],"answer":"B"},{"question":"What is the maximum number of Web-to-Lead submissions Salesforce processes per day?","options":["100","250","500","1000"],"answer":"C"},{"question":"Which OWD setting gives users access only to records they own?","options":["Public Read Only","Public Read/Write","Controlled by Parent","Private"],"answer":"D"},{"question":"What is the difference between a Profile and a Permission Set?","options":["Profiles are additive; Permission Sets are restrictive","Permission Sets are additive; Profiles define baseline access","Both work the same way","Permission Sets replace Profiles in Lightning"],"answer":"B"},{"question":"Which report format allows combining data from multiple report types?","options":["Summary","Matrix","Joined","Tabular"],"answer":"C"},{"question":"Which Flow type runs before a record is saved to the database?","options":["Screen Flow","Scheduled Flow","Before Save Record-Triggered Flow","Platform Event Flow"],"answer":"C"},{"question":"In an Approval Process, which action can be configured upon rejection?","options":["Launch a Screen Flow","Field Update","Create a report","Send a survey"],"answer":"B"},{"question":"What is the purpose of a Junction Object?","options":["To link two orgs together","To implement Many-to-Many relationships","To create self-referencing relationships","To store metadata configuration"],"answer":"B"},{"question":"Which Service Cloud component allows agents to handle multiple cases in one tab?","options":["Knowledge Base","Case Escalation Rule","Service Console","Entitlement Process"],"answer":"C"},{"question":"What does OWD stand for?","options":["Object-Wide Definition","Organization-Wide Defaults","Object Writing Defaults","Org-Wide Data"],"answer":"B"},{"question":"Which validation rule function checks if a field value changed during an edit?","options":["ISNEW()","ISBLANK()","PRIORVALUE()","ISCHANGED()"],"answer":"D"},{"question":"What is the purpose of Custom Metadata Types over Custom Settings?","options":["Support more field types","They are deployable and packageable","Allow more records","Work only in Classic"],"answer":"B"},{"question":"In a Role Hierarchy, what does assigning a role to a user do?","options":["Restricts access below the OWD","Opens access to records owned by users below in hierarchy","Replaces Profile permissions","Grants Modify All Data"],"answer":"B"},{"question":"Which Flow element is used to iterate over a collection of records?","options":["Decision","Assignment","Loop","Subflow"],"answer":"C"}],"scenarios":[],"project":null},"B":{"mcq":[{"question":"Which cloud service model provides virtualized computing resources like servers and storage?","options":["SaaS","PaaS","IaaS","DaaS"],"answer":"C"},{"question":"What is Metadata-driven architecture in Salesforce?","options":["Storing all data in JSON format","Storing customizations as metadata rather than hard-coded changes","Using REST API for all data access","Building apps using only Apex code"],"answer":"B"},{"question":"Which license type gives access only to Salesforce collaboration features?","options":["Salesforce License","Platform License","Chatter License","Community License"],"answer":"C"},{"question":"When should you create a Custom Object instead of using a Standard Object?","options":["Whenever you need more than 10 fields","When no standard object fits your business need","When you need reports","When the object needs a tab"],"answer":"B"},{"question":"Which field type allows selecting multiple values from a list?","options":["Picklist","Multi-Select Picklist","Text","Lookup"],"answer":"B"},{"question":"In a Lookup relationship, what happens to child records when the parent is deleted?","options":["Child records are deleted","Child records are archived","The lookup field is set to null","Child records move to recycle bin"],"answer":"C"},{"question":"Which Schema Builder limitation is true?","options":["Cannot view existing relationships","Cannot create Roll-Up Summary fields","Cannot create custom objects","Cannot display standard objects"],"answer":"B"},{"question":"What is the purpose of a Dependent Picklist?","options":["To auto-populate a field based on a formula","To filter available values based on a controlling field","To create a roll-up of picklist values","To restrict picklist values by Profile"],"answer":"B"},{"question":"Which standard object tracks marketing initiatives and their ROI?","options":["Opportunity","Lead","Campaign","Case"],"answer":"C"},{"question":"What is the purpose of Case Entitlements in Service Cloud?","options":["To assign cases to queues","To define and enforce SLA agreements","To auto-respond to case emails","To escalate cases after 24 hours"],"answer":"B"},{"question":"What is a Permission Set Group?","options":["A group of users with same permissions","A bundle of multiple Permission Sets","A set of profiles combined","An OWD override"],"answer":"B"},{"question":"Which sharing method allows a record owner to manually share a single record?","options":["Sharing Rule","Role Hierarchy","Manual Sharing","Permission Set"],"answer":"C"},{"question":"In Flow Builder, which element retrieves records from Salesforce?","options":["Assignment","Get Records","Create Records","Decision"],"answer":"B"},{"question":"What is the difference between Before Save and After Save Record-Triggered Flows?","options":["Before Save can send emails; After Save cannot","Before Save updates fields without a DML; After Save commits first then runs","After Save is faster","Before Save runs after approval processes"],"answer":"B"},{"question":"Which report format allows grouping by both rows and columns?","options":["Tabular","Summary","Matrix","Joined"],"answer":"C"},{"question":"What is the purpose of Dynamic Forms in Lightning Record Pages?","options":["To auto-submit forms on record save","To show/hide individual fields based on conditions","To create forms using Flows","To replace Page Layouts entirely"],"answer":"B"},{"question":"Which object setting must be enabled to use Roll-Up Summary fields?","options":["Allow Reports","Allow Search","Track Field History","Master-Detail relationship on child object"],"answer":"D"},{"question":"What is the primary use of Custom Labels in Salesforce?","options":["To create custom field labels on page layouts","To support multi-language text used in formulas and code","To label custom apps in App Manager","To rename standard object labels"],"answer":"B"},{"question":"In Lead Conversion, which records can be created?","options":["Account and Contact only","Contact and Opportunity only","Account, Contact, and Opportunity","Account, Contact, Case, and Opportunity"],"answer":"C"},{"question":"What does the Forecast Category Commit indicate in an Opportunity?","options":["Deal is lost","Deal is in early stage","Sales rep is confident the deal will close","Deal requires manager approval"],"answer":"C"}],"scenarios":[{"label":"Scenario 1","context":"A company receives 200+ emails daily as cases. High-priority cases from enterprise clients must be escalated to a senior agent if not resolved within 4 hours during business hours.","question":"How would you configure Email-to-Case, Case Assignment Rules, Entitlements, and Escalation Rules?"},{"label":"Scenario 2","context":"A sales manager reports: Our reps are losing deals because they don't know what to do at each opportunity stage.","question":"How would you use the Path Component, Guidance for Success, and a Record-Triggered Flow to guide reps and automate next steps?"}],"project":{"title":"Employee Onboarding System","description":"Build an Employee Onboarding Tracker:\n - Objects: Employee, Department, Onboarding Task, Training Course, Task Assignment (junction)\n - Formula fields: Days since joining, Onboarding completion %\n - Validation rules: Joining date cannot be in past, mandatory department\n - 3 Record Types: Full-Time, Contract, Intern\n - Screen Flow: Multi-step onboarding form\n - Scheduled Flow: Flag incomplete onboarding after 7 days\n - Approval Process: Training course enrollment needs HR approval\n - Dashboard: Onboarding status by dept, overdue tasks, new hires this month"}},"C":{"mcq":[{"question":"Salesforce is primarily classified as which type of cloud service?","options":["IaaS","PaaS only","SaaS and PaaS","Private Cloud"],"answer":"C"},{"question":"How does Salesforce keep one customer's data isolated in a multi-tenant environment?","options":["Separate databases per customer","Virtual machines per org","Metadata and tenant ID tagging","Encrypted file partitions"],"answer":"C"},{"question":"Which Salesforce edition includes the most features including unlimited sandboxes?","options":["Enterprise","Professional","Unlimited","Developer"],"answer":"C"},{"question":"What is AppExchange?","options":["Salesforce's API marketplace","Salesforce's marketplace for third-party apps and components","A tool to exchange data between orgs","A platform for building custom APIs"],"answer":"B"},{"question":"Which field type displays the total value of all related child records on a parent?","options":["Formula","Currency","Roll-Up Summary","Number"],"answer":"C"},{"question":"What is a Self Relationship in Salesforce?","options":["A field that references itself","A lookup from an object back to the same object","A relationship between two standard objects","A relationship used only in reports"],"answer":"B"},{"question":"Which of the following is NOT a valid Roll-Up Summary function?","options":["SUM","COUNT","AVG","MAX"],"answer":"C"},{"question":"What does Field-Level Security control?","options":["Which users can create records","Whether a field is visible or editable per profile","Which fields appear on page layouts","Which fields are required during record creation"],"answer":"B"},{"question":"In a Page Layout Assignment, which three elements form the assignment matrix?","options":["User, Object, Field","Profile, Record Type, Page Layout","Role, Permission Set, Profile","Object, App, Profile"],"answer":"B"},{"question":"Which Opportunity field auto-maps based on the selected Stage?","options":["Close Date","Amount","Forecast Category and Probability","Account Name"],"answer":"C"},{"question":"What is the purpose of a Public Group in Salesforce?","options":["To group records for reporting","To bundle users, roles, and subordinates for sharing rules","To assign profiles to multiple users at once","To grant system admin access to a group"],"answer":"B"},{"question":"Which Knowledge feature allows categorizing articles for targeted visibility?","options":["Article Versioning","Data Categories","Article Types","Knowledge Queues"],"answer":"B"},{"question":"In Flows, what is a Fault Connector used for?","options":["To debug flow variables","To handle errors when an element fails","To connect two screen flows","To trigger a flow from an error log"],"answer":"B"},{"question":"What is the key difference between Criteria-based and Owner-based Sharing Rules?","options":["Owner-based rules are more secure","Criteria-based shares records matching field criteria; Owner-based shares by ownership","Criteria-based rules override OWD completely","Owner-based rules only work with Private OWD"],"answer":"B"},{"question":"Which dashboard component is best for showing a single KPI number like Total Revenue?","options":["Chart","Gauge","Table","Metric"],"answer":"D"},{"question":"What is the purpose of a Scheduled Flow?","options":["To run a flow when a record is updated","To process batches of records at a defined time/frequency","To schedule page layout changes","To trigger approval processes at midnight"],"answer":"B"},{"question":"A formula field uses TODAY() - Joining_Date__c. What does this return?","options":["The joining date as text","Number of days since the student joined","A boolean checking if they joined today","The next anniversary date"],"answer":"B"},{"question":"Which Salesforce feature tracks changes made to specific fields over time?","options":["Formula Fields","Validation Rules","Field History Tracking","Audit Trail"],"answer":"C"},{"question":"What is the correct order of execution when a record is saved?","options":["Triggers → Validation Rules → Flows → Workflow","Validation Rules → Before Triggers → Before Save Flows → After Triggers","Flows → Triggers → Validation Rules → Process Builder","Workflow → Approval Process → Triggers → Flows"],"answer":"B"},{"question":"Which Lightning App Builder component shows/hides fields individually based on record data?","options":["Record Detail Component","Dynamic Forms","Related List Component","Highlights Panel"],"answer":"B"}],"scenarios":[{"label":"Scenario 1","context":"A retail company: When a high-value Opportunity (Amount > 10,00,000) moves to Negotiation stage, a discount approval task should be created and sent to Sales Manager. If rejected, revert stage to Proposal.","question":"Design the Approval Process step by step. What entry criteria, approver settings, and approval/rejection actions would you configure?"},{"label":"Scenario 2","context":"A new admin notices that Sales Reps in Region A can see Leads owned by Reps in Region B, even though OWD for Lead is set to Private.","question":"Walk through all possible reasons (Role Hierarchy, Sharing Rules, Manual Sharing, Permission Sets) and explain how to audit and fix each one."}],"project":{"title":"Hospital Patient Management System","description":"Build a Hospital Patient Management System:\n - Objects: Patient, Doctor, Department, Appointment, Medical Record\n - Formula fields: Patient age from DOB, days since last appointment\n - Validation rules: Appointment date cannot be in past, phone must be 10 digits (REGEX)\n - 3 Record Types: OPD, IPD, Emergency\n - Before Save Flow: Auto-assign Department based on selected Doctor\n - After Save Flow: When Appointment=Completed, auto-create Medical Record\n - Screen Flow: Patient registration multi-step form\n - Approval Process: IPD admission requires Doctor + HOD approval\n - Dashboard: 5 components"}}};
+
+function loadBank(bank) {
+  QUESTIONS = {};
+  const setSel = document.getElementById('setSelector');
+  setSel.innerHTML = '<option value="">— Select a set —</option>';
+  const setLabels = { A:'Set A', B:'Set B', C:'Set C', D:'Set D', E:'Set E' };
+  for (const [setId, setData] of Object.entries(bank)) {
+    const questions = [];
+    if (setData.mcq) setData.mcq.forEach(m => {
+      questions.push({ type:'mcq', q:m.question, opts:m.options, correct:letterToIndex(m.answer) });
+    });
+    if (setData.scenarios) setData.scenarios.forEach((s,i) => {
+      questions.push({ type:'scenario', label:s.label||'Scenario '+(i+1), context:s.context, q:s.question });
+    });
+    if (setData.project) {
+      questions.push({ type:'project', label:'Project', title:setData.project.title||'Project', q:setData.project.description });
+    }
+    QUESTIONS[setId] = questions;
+    const opt = document.createElement('option');
+    opt.value = setId;
+    opt.textContent = (setLabels[setId]||'Set '+setId) + ' (' + questions.length + ' questions)';
+    setSel.appendChild(opt);
+  }
+}
+
+// Try live fetch from Google Sheet first, fallback to embedded data
+function initQuestions() {
+  fetch(SHEETS_URL)
+    .then(r => r.text())
+    .then(text => {
+      const m = text.match(/handleSheetData\(([\s\S]*)\)/);
+      if (m) { loadBank(JSON.parse(m[1])); }
+      else { loadBank(QUESTION_DATA); }
+    })
+    .catch(() => { loadBank(QUESTION_DATA); });
+}
+
+let state = {
+  set:null, questions:[], answers:{}, current:0,
+  timeLeft:EXAM_DURATION, timerInterval:null,
+  violations:0, submitted:false,
+  candidateName:'', candidateEmail:'',
+  startTime:null
+};
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildRandomizedQuestions(setId) {
+  const all = QUESTIONS[setId];
+  const mcqs = all.filter(q => q.type === 'mcq');
+  const scenarios = all.filter(q => q.type === 'scenario');
+  const projects = all.filter(q => q.type === 'project');
+
+  const shuffledMCQs = shuffle(mcqs).map(q => {
+    const indices = q.opts.map((_, i) => i);
+    const shuffledIndices = shuffle(indices);
+    const newOpts = shuffledIndices.map(i => q.opts[i]);
+    const newCorrect = shuffledIndices.indexOf(q.correct);
+    return { ...q, opts: newOpts, correct: newCorrect };
+  });
+
+  return [...shuffledMCQs, ...shuffle(scenarios), ...projects];
+}
+
+function startExam() {
+  const name = document.getElementById('candidateName').value.trim();
+  const email = document.getElementById('candidateEmail').value.trim();
+  const set = document.getElementById('setSelector').value;
+  if (!name||!email||!set){alert('Please fill in all fields and select a test set.');return;}
+  if (!QUESTIONS[set] || QUESTIONS[set].length === 0) { alert('No questions found for this set.'); return; }
+  state.candidateName=name; state.candidateEmail=email; state.set=set;
+  state.questions=buildRandomizedQuestions(set); state.startTime=Date.now();
+  state.totalMCQ = state.questions.filter(q=>q.type==='mcq').length;
+  state.totalScenario = state.questions.filter(q=>q.type==='scenario').length;
+  document.getElementById('examTitle').textContent=`Salesforce Test — Set ${set}`;
+  document.getElementById('candidateBadge').textContent=name;
+  showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer(); setupProctoring();
+  try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', initQuestions);
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function startTimer(){
+  state.timerInterval=setInterval(()=>{
+    state.timeLeft--;
+    updateTimerDisplay();
+    if(state.timeLeft<=0){clearInterval(state.timerInterval);submitExam('timeout');}
+  },1000);
+}
+
+function updateTimerDisplay(){
+  const m=Math.floor(state.timeLeft/60),s=state.timeLeft%60;
+  const el=document.getElementById('timer');
+  el.textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  el.className='timer';
+  if(state.timeLeft<=300)el.className='timer danger';
+  else if(state.timeLeft<=600)el.className='timer warning';
+}
+
+// ===================== CAMERA PROCTORING =====================
+let camStream = null;
+let camSnapshots = []; // stores base64 snapshots
+let camInterval = null;
+
+async function startCamera() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width:320, height:240, facingMode:'user' }, audio:false });
+    const video = document.getElementById('camVideo');
+    video.srcObject = camStream;
+    document.getElementById('cameraBox').style.display = 'block';
+
+    // Take a snapshot every 30 seconds
+    takeSnapshot(); // first one immediately
+    camInterval = setInterval(takeSnapshot, 30000);
+  } catch(err) {
+    console.warn('Camera denied:', err);
+    document.getElementById('camDenied').style.display = 'block';
+  }
+}
+
+function takeSnapshot() {
+  try {
+    const video = document.getElementById('camVideo');
+    const canvas = document.getElementById('camCanvas');
+    canvas.width = 320; canvas.height = 240;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, 320, 240);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+    camSnapshots.push({ time: new Date().toLocaleTimeString(), img: dataUrl });
+    // Keep max 20 snapshots to avoid memory issues
+    if (camSnapshots.length > 20) camSnapshots.shift();
+  } catch(e) { /* ignore */ }
+}
+
+function stopCamera() {
+  if (camInterval) clearInterval(camInterval);
+  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  document.getElementById('cameraBox').style.display = 'none';
+}
+// ===================== END CAMERA =====================
+
+function setupProctoring(){
+  startCamera();
+  document.addEventListener('visibilitychange',handleVisibility);
+  window.addEventListener('blur',handleBlur);
+  document.addEventListener('contextmenu',e=>e.preventDefault());
+  document.addEventListener('keydown',e=>{
+    if(e.key==='F12'||(e.ctrlKey&&['u','s','a','c','p'].includes(e.key.toLowerCase()))||(e.ctrlKey&&e.shiftKey&&['i','j','c'].includes(e.key.toLowerCase())))e.preventDefault();
+  });
+}
+
+let blurTimeout=null;
+function handleBlur(){if(state.submitted)return;blurTimeout=setTimeout(()=>handleViolation(),300);}
+function handleVisibility(){
+  if(document.hidden&&!state.submitted)handleViolation();
+  else if(blurTimeout){clearTimeout(blurTimeout);blurTimeout=null;}
+}
+
+function handleViolation(){
+  if(state.submitted)return;
+  state.violations++;
+  document.getElementById('violationBadge').textContent=`Violations: ${state.violations}`;
+  if(state.violations===1){document.getElementById('warningOverlay').classList.add('show');}
+  else{document.getElementById('warningOverlay').classList.remove('show');document.getElementById('autoSubmitOverlay').classList.add('show');clearInterval(state.timerInterval);state.submitted=true;}
+}
+
+function dismissWarning(){document.getElementById('warningOverlay').classList.remove('show');}
+
+function buildQGrid(){
+  const grid=document.getElementById('qGrid');grid.innerHTML='';
+  state.questions.forEach((q,i)=>{
+    const d=document.createElement('div');d.className='q-dot';d.id=`qdot-${i}`;
+    d.textContent=i+1;d.onclick=()=>goTo(i);grid.appendChild(d);
+  });updateGrid();
+}
+
+function updateGrid(){
+  state.questions.forEach((q,i)=>{
+    const d=document.getElementById(`qdot-${i}`);if(!d)return;
+    d.className='q-dot';
+    if(i===state.current)d.classList.add('current');
+    else if(state.answers[i]!==undefined)d.classList.add('answered');
+  });
+  const answered=Object.keys(state.answers).length,total=state.questions.length;
+  const mcqAns=Object.keys(state.answers).filter(i=>state.questions[i].type==='mcq').length;
+  const scAns=Object.keys(state.answers).filter(i=>state.questions[i].type==='scenario').length;
+  document.getElementById('statAnswered').textContent=answered;
+  document.getElementById('statRemaining').textContent=total-answered;
+  document.getElementById('statMCQ').textContent=`${mcqAns}/${state.totalMCQ||0}`;
+  document.getElementById('statScenario').textContent=`${scAns}/${state.totalScenario||0}`;
+  document.getElementById('progressBar').style.width=`${(answered/total)*100}%`;
+}
+
+function renderQuestion(){
+  const q=state.questions[state.current],total=state.questions.length;
+  document.getElementById('prevBtn').disabled=state.current===0;
+  document.getElementById('nextBtn').textContent=state.current===total-1?'Finish ✓':'Next →';
+  let html='';
+  if(q.type==='mcq'){
+    html=`<div class="section-label">Section 1 — Multiple Choice</div>
+      <div class="q-number">Question ${state.current+1} of ${total} &nbsp;·&nbsp; 1 mark</div>
+      <div class="q-text">${q.q}</div>
+      <div class="options">${q.opts.map((o,i)=>`
+        <div class="option ${state.answers[state.current]===i?'selected':''}" onclick="selectOption(${i})">
+          <div class="option-letter">${String.fromCharCode(65+i)}</div><span>${o}</span>
+        </div>`).join('')}</div>`;
+  } else if(q.type==='scenario'){
+    html=`<div class="section-label">Section 2 — Scenario Question</div>
+      <div class="q-number">${q.label} &nbsp;·&nbsp; 3 marks</div>
+      <div class="scenario-box"><strong>Situation:</strong><br>${q.context}</div>
+      <div class="q-text">${q.q}</div>
+      <textarea class="textarea-input" placeholder="Write your answer here..." rows="8"
+        oninput="saveText(this.value)">${state.answers[state.current]||''}</textarea>`;
+  } else {
+    html=`<div class="section-label">Section 3 — Project</div>
+      <div class="q-number">${q.label}: ${q.title} &nbsp;·&nbsp; Practical</div>
+      <div class="q-text">Project Requirements:</div>
+      <div class="scenario-box" style="white-space:pre-line;">${q.q}</div>
+      <textarea class="textarea-input" placeholder="Describe your implementation or paste your Salesforce org link..." rows="8"
+        oninput="saveText(this.value)">${state.answers[state.current]||''}</textarea>`;
+  }
+  document.getElementById('questionContent').innerHTML=html;
+  updateGrid();
+}
+
+function selectOption(i){state.answers[state.current]=i;renderQuestion();}
+function saveText(v){state.answers[state.current]=v;updateGrid();}
+function navigate(dir){
+  const n=state.current+dir;
+  if(n<0||n>=state.questions.length){if(dir>0&&state.current===state.questions.length-1)confirmSubmit();return;}
+  state.current=n;renderQuestion();
+}
+function goTo(i){state.current=i;renderQuestion();}
+
+function confirmSubmit(){
+  if(confirm('Are you sure you want to submit your exam? This cannot be undone.'))submitExam('manual');
+}
+
+function submitExam(reason){
+  if(state.submitted&&reason!=='auto-violation')return;
+  state.submitted=true;
+  clearInterval(state.timerInterval);
+  takeSnapshot(); // final snapshot
+  stopCamera();
+  document.getElementById('submittingOverlay').classList.add('show');
+  calculateAndSend();
+}
+
+function finalizeAndShow(){
+  document.getElementById('autoSubmitOverlay').classList.remove('show');
+  document.getElementById('submittingOverlay').classList.add('show');
+  calculateAndSend();
+}
+
+function getTimeTaken(){
+  const elapsed=Math.floor((Date.now()-state.startTime)/1000);
+  const used=EXAM_DURATION-state.timeLeft;
+  const t=Math.min(elapsed,EXAM_DURATION);
+  const m=Math.floor(t/60),s=t%60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function calculateAndSend(){
+  const mcqs=[];
+  state.questions.forEach((q,i)=>{ if(q.type==='mcq') mcqs.push({q,idx:i}); });
+  let correct=0,wrong=0,skipped=0;
+  mcqs.forEach(({q,idx})=>{
+    const ans=state.answers[idx];
+    if(ans===undefined)skipped++;
+    else if(ans===q.correct)correct++;
+    else wrong++;
+  });
+  const totalMCQ=mcqs.length||1;
+  const pct=Math.round((correct/totalMCQ)*100);
+  const scenarios=state.questions.map((q,i)=>({q,idx:i})).filter(x=>x.q.type==='scenario');
+  const projIdx=state.questions.findIndex(q=>q.type==='project');
+  const mcqAnswers={};
+  mcqs.forEach(({q,idx},i)=>{ mcqAnswers[i]=state.answers[idx]; });
+
+  const payload={
+    name:state.candidateName,
+    email:state.candidateEmail,
+    set:state.set,
+    score:correct,
+    percentage:pct,
+    correct,wrong,skipped,
+    violations:state.violations,
+    timeTaken:getTimeTaken(),
+    scenario1:scenarios[0]?state.answers[scenarios[0].idx]||'':'',
+    scenario2:scenarios[1]?state.answers[scenarios[1].idx]||'':'',
+    project:state.answers[projIdx]||'',
+    mcqAnswers
+  };
+
+  sendToSheets(payload, correct, wrong, skipped, pct, mcqs);
+}
+
+async function sendToSheets(payload, correct, wrong, skipped, pct, mcqs){
+  try {
+    await fetch(SHEETS_URL, {
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    document.getElementById('submittingOverlay').classList.remove('show');
+    showResultScreen(correct, wrong, skipped, pct, mcqs, true);
+  } catch(err) {
+    document.getElementById('submittingOverlay').classList.remove('show');
+    showResultScreen(correct, wrong, skipped, pct, mcqs, false);
+  }
+}
+
+function showResultScreen(correct, wrong, skipped, pct, mcqs, sheetSuccess){
+  showScreen('resultScreen');
+  const passed=pct>=60;
+  document.getElementById('scoreNum').textContent=correct;
+  document.getElementById('scoreDenom').textContent=`/ ${mcqs.length}`;
+  document.getElementById('scoreCircle').className=`score-circle ${passed?'pass':'fail'}`;
+  document.getElementById('resultTitle').textContent=passed?'Well Done!':'Better Luck Next Time';
+  document.getElementById('resultSub').textContent=state.candidateName + ' · Set ' + state.set + ' · ' + (passed?'PASSED':'FAILED');
+  document.getElementById('rsCorrect').textContent=correct;
+  document.getElementById('rsWrong').textContent=wrong;
+  document.getElementById('rsSkipped').textContent=skipped;
+  document.getElementById('rsPercent').textContent=`${pct}%`;
+  document.getElementById('rsPercent').className=`rs-val ${pct>=80?'green':pct>=60?'yellow':'red'}`;
+
+  const statusEl=document.getElementById('sheetStatus');
+  if(SHEETS_URL==='YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'){
+    statusEl.className='sheet-status failed';
+    statusEl.innerHTML='⚠ Google Sheets URL not configured yet. Add your Apps Script URL to the HTML file.';
+  } else if(sheetSuccess){
+    statusEl.className='sheet-status sent';
+    statusEl.innerHTML='✓ Results saved to Google Sheets — interviewer has been notified.';
+  } else {
+    statusEl.className='sheet-status failed';
+    statusEl.innerHTML='✗ Could not reach Google Sheets. Please share this screen with your interviewer.';
+  }
+
+  let reviewHTML='';
+  mcqs.forEach(({q,idx},i)=>{
+    const ans=state.answers[idx];
+    const status=ans===undefined?'skip':ans===q.correct?'correct':'wrong';
+    reviewHTML+=`<div class="answer-row">
+      <span class="ans-q">Q${i+1}. ${q.q.substring(0,52)}${q.q.length>52?'...':''}</span>
+      ${status==='correct'?`<span class="ans-correct">✓ ${String.fromCharCode(65+ans)}</span>`:
+        status==='wrong'?`<span class="ans-wrong">✗ ${String.fromCharCode(65+ans)} (${String.fromCharCode(65+q.correct)})</span>`:
+        `<span class="ans-skip">— (${String.fromCharCode(65+q.correct)})</span>`}
+    </div>`;
+  });
+  document.getElementById('answerReview').innerHTML=reviewHTML;
+
+  if(state.violations>0){
+    document.getElementById('violationResult').innerHTML=`
+      <div class="violation-warning">⚠ ${state.violations} tab switch violation(s) recorded for this submission.</div>`;
+  }
+}
+</script>
+</body>
+</html>

@@ -401,6 +401,8 @@ function startExam() {
   const email = document.getElementById('candidateEmail').value.trim();
   const set = document.getElementById('setSelector').value;
   if (!name||!email||!set){alert('Please fill in all fields and select a test set.');return;}
+  // Email validation
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Please enter a valid email address.');return;}
   if (!QUESTIONS[set] || QUESTIONS[set].length === 0) { alert('No questions found for this set.'); return; }
   state.candidateName=name; state.candidateEmail=email; state.set=set;
   state.questions=buildRandomizedQuestions(set); state.startTime=Date.now();
@@ -408,8 +410,10 @@ function startExam() {
   state.totalScenario = state.questions.filter(q=>q.type==='scenario').length;
   document.getElementById('examTitle').textContent=`Salesforce Test — Set ${set}`;
   document.getElementById('candidateBadge').textContent=name;
-  showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer(); setupProctoring();
+  showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer();
+  // Request fullscreen first, then start camera, then enable proctoring AFTER camera resolves
   try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}catch(e){}
+  setupProctoring();
 }
 
 document.addEventListener('DOMContentLoaded', initQuestions);
@@ -447,14 +451,14 @@ async function startCamera() {
     const video = document.getElementById('camVideo');
     video.srcObject = camStream;
     document.getElementById('cameraBox').style.display = 'block';
-
-    // Take a snapshot every 30 seconds
-    takeSnapshot(); // first one immediately
+    takeSnapshot();
     camInterval = setInterval(takeSnapshot, 30000);
   } catch(err) {
     console.warn('Camera denied:', err);
     document.getElementById('camDenied').style.display = 'block';
   }
+  // Enable violation detection AFTER camera permission is handled
+  state.proctoringActive = true;
 }
 
 function takeSnapshot() {
@@ -479,6 +483,7 @@ function stopCamera() {
 // ===================== END CAMERA =====================
 
 function setupProctoring(){
+  state.proctoringActive = false; // Will be set true after camera resolves
   startCamera();
   document.addEventListener('visibilitychange',handleVisibility);
   window.addEventListener('blur',handleBlur);
@@ -486,17 +491,22 @@ function setupProctoring(){
   document.addEventListener('keydown',e=>{
     if(e.key==='F12'||(e.ctrlKey&&['u','s','a','c','p'].includes(e.key.toLowerCase()))||(e.ctrlKey&&e.shiftKey&&['i','j','c'].includes(e.key.toLowerCase())))e.preventDefault();
   });
+  // Detect fullscreen exit — count as violation
+  document.addEventListener('fullscreenchange',function(){
+    if(!document.fullscreenElement && !state.submitted && state.proctoringActive) handleViolation();
+  });
 }
 
 let blurTimeout=null;
-function handleBlur(){if(state.submitted)return;blurTimeout=setTimeout(()=>handleViolation(),300);}
+function handleBlur(){if(state.submitted||!state.proctoringActive)return;blurTimeout=setTimeout(()=>handleViolation(),500);}
 function handleVisibility(){
+  if(!state.proctoringActive)return;
   if(document.hidden&&!state.submitted)handleViolation();
   else if(blurTimeout){clearTimeout(blurTimeout);blurTimeout=null;}
 }
 
 function handleViolation(){
-  if(state.submitted)return;
+  if(state.submitted||!state.proctoringActive)return;
   state.violations++;
   document.getElementById('violationBadge').textContent=`Violations: ${state.violations}`;
   if(state.violations===1){document.getElementById('warningOverlay').classList.add('show');}

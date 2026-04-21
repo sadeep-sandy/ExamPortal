@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Salesforce Training Assessment</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Face detection (browser-based AI) -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<!-- Device fingerprinting -->
+<script src="https://openfpcdn.io/fingerprintjs/v4/iife.min.js"></script>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -168,30 +172,59 @@
       </div>
     </div>
     <div class="login-title">Start Your Test</div>
-    <div class="login-sub">Enter your details and select a test set. The exam is timed and proctored.</div>
-    <div class="form-group">
-      <label class="form-label">Full Name</label>
-      <input type="text" id="candidateName" class="form-input" placeholder="Enter your full name" />
+    <div class="login-sub">Verify your email to begin. The exam is timed, proctored with camera, and fraud-detected.</div>
+
+    <!-- Step 1: Email + Send OTP -->
+    <div id="step1Email">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="candidateEmail" class="form-input" placeholder="your@email.com" />
+      </div>
+      <button class="btn-primary" id="sendOtpBtn" onclick="sendOtp()">Send Verification Code</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">Email Address</label>
-      <input type="email" id="candidateEmail" class="form-input" placeholder="your@email.com" />
+
+    <!-- Step 2: Enter OTP -->
+    <div id="step2Otp" style="display:none;">
+      <div style="background:rgba(59,127,255,0.08);border:1px solid rgba(59,127,255,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--accent2);margin-bottom:1rem;">
+        Code sent to <strong id="otpEmailDisplay"></strong>. Check your inbox.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Enter 6-digit Code</label>
+        <input type="text" id="otpInput" class="form-input" placeholder="000000" maxlength="6" style="letter-spacing:8px;font-size:20px;text-align:center;font-family:'DM Mono',monospace;" />
+      </div>
+      <button class="btn-primary" onclick="verifyOtp()">Verify Code</button>
+      <button class="btn-nav" style="width:100%;margin-top:10px;background:transparent;border:1px solid var(--border2);" onclick="resetToEmail()">Change Email</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">Test Set</label>
-      <select id="setSelector" class="form-select">
-        <option value="">— Select a set —</option>
-      </select>
+
+    <!-- Step 3: Full exam form (after OTP verified) -->
+    <div id="step3Exam" style="display:none;">
+      <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:#6ee7b7;margin-bottom:1rem;">
+        Email verified: <strong id="verifiedEmailDisplay"></strong>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input type="text" id="candidateName" class="form-input" placeholder="Enter your full name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Test Set</label>
+        <select id="setSelector" class="form-select">
+          <option value="">— Select a set —</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="startExam()">Begin Exam</button>
     </div>
-    <button class="btn-primary" onclick="startExam()">Begin Exam</button>
+
+    <div id="authError" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:#fca5a5;margin-top:1rem;text-align:center;"></div>
     <div class="rules-box">
       <div class="rules-title">Exam Rules</div>
       <ul class="rules-list">
         <li>Duration: 45 minutes — auto-submits when time runs out</li>
-        <li>Tab switching is monitored — 1st violation = warning</li>
-        <li>2nd tab switch will auto-submit your exam immediately</li>
-        <li>Right-click and DevTools are disabled</li>
-        <li>Results are automatically sent to the interviewer</li>
+        <li>Camera + microphone required — full session is recorded</li>
+        <li>Face detection: multiple people / looking away = violation</li>
+        <li>Voice detection: talking during exam = violation</li>
+        <li>Tab switching / fullscreen exit — 1st = warning, 2nd = auto-submit</li>
+        <li>Copy / paste / right-click disabled</li>
+        <li>One attempt per email — cannot retake</li>
       </ul>
     </div>
   </div>
@@ -236,6 +269,7 @@
   <!-- Camera proctoring -->
   <div class="camera-box" id="cameraBox" style="display:none;">
     <div class="cam-label"><div class="cam-dot"></div> REC</div>
+    <div id="faceStatus" style="position:absolute;bottom:6px;left:6px;font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.8);color:white;font-weight:500;">Face OK</div>
     <video id="camVideo" autoplay muted playsinline></video>
     <canvas id="camCanvas"></canvas>
   </div>
@@ -318,9 +352,109 @@ const SHEET_ID = "170lsPmerJe9V_TGtPkUfUXPixXH3oh5cYXeYN5iBVjY";
 // ================================================================
 
 let QUESTIONS = {};
+let deviceFingerprint = "";
+let verifiedEmail = "";
 
 function letterToIndex(letter) {
   return 'ABCD'.indexOf((letter || 'A').toString().trim().toUpperCase());
+}
+
+// ===================== DEVICE FINGERPRINT =====================
+async function initFingerprint() {
+  try {
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    deviceFingerprint = result.visitorId;
+  } catch(e) { deviceFingerprint = "unknown"; }
+}
+
+// ===================== OTP FLOW =====================
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(()=>{ el.style.display = 'none'; }, 6000);
+}
+
+function jsonpRequest(url, callbackName) {
+  return new Promise((resolve, reject) => {
+    const cbName = callbackName || ('jsonp_cb_' + Date.now() + Math.random().toString(36).slice(2));
+    window[cbName] = function(data) {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    const script = document.createElement('script');
+    script.src = url + (url.indexOf('?')>-1?'&':'?') + 'callback=' + cbName;
+    script.onerror = () => { delete window[cbName]; reject(new Error('Network error')); };
+    document.body.appendChild(script);
+  });
+}
+
+async function sendOtp() {
+  const email = document.getElementById('candidateEmail').value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthError('Please enter a valid email address.');
+    return;
+  }
+  const btn = document.getElementById('sendOtpBtn');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  try {
+    const url = SHEETS_URL + '?action=sendOtp&email=' + encodeURIComponent(email) + '&fingerprint=' + encodeURIComponent(deviceFingerprint);
+    const res = await jsonpRequest(url);
+    if (res.success) {
+      document.getElementById('otpEmailDisplay').textContent = email;
+      document.getElementById('step1Email').style.display = 'none';
+      document.getElementById('step2Otp').style.display = 'block';
+      document.getElementById('otpInput').focus();
+    } else {
+      showAuthError(res.message || res.error || 'Could not send OTP. Try again.');
+      btn.disabled = false; btn.textContent = 'Send Verification Code';
+    }
+  } catch(err) {
+    showAuthError('Network error. Please check your internet.');
+    btn.disabled = false; btn.textContent = 'Send Verification Code';
+  }
+}
+
+async function verifyOtp() {
+  const email = document.getElementById('candidateEmail').value.trim();
+  const otp = document.getElementById('otpInput').value.trim();
+  if (!otp || otp.length !== 6) { showAuthError('Enter the 6-digit code.'); return; }
+  try {
+    const url = SHEETS_URL + '?action=verifyOtp&email=' + encodeURIComponent(email) + '&otp=' + encodeURIComponent(otp);
+    const res = await jsonpRequest(url);
+    if (res.success) {
+      verifiedEmail = email;
+      document.getElementById('verifiedEmailDisplay').textContent = email;
+      document.getElementById('step2Otp').style.display = 'none';
+      document.getElementById('step3Exam').style.display = 'block';
+      loadQuestions(); // load questions now
+    } else {
+      showAuthError(res.error || 'Invalid OTP.');
+    }
+  } catch(err) {
+    showAuthError('Network error. Try again.');
+  }
+}
+
+function resetToEmail() {
+  document.getElementById('step2Otp').style.display = 'none';
+  document.getElementById('step1Email').style.display = 'block';
+  document.getElementById('otpInput').value = '';
+  const btn = document.getElementById('sendOtpBtn');
+  btn.disabled = false; btn.textContent = 'Send Verification Code';
+}
+
+function loadQuestions() {
+  fetch(SHEETS_URL)
+    .then(r => r.text())
+    .then(text => {
+      const m = text.match(/handleSheetData\(([\s\S]*)\)/);
+      if (m) loadBank(JSON.parse(m[1]));
+      else loadBank(QUESTION_DATA);
+    })
+    .catch(() => loadBank(QUESTION_DATA));
 }
 
 // Fallback questions (used if live fetch fails on file://)
@@ -350,24 +484,16 @@ function loadBank(bank) {
   }
 }
 
-// Try live fetch from Google Sheet first, fallback to embedded data
-function initQuestions() {
-  fetch(SHEETS_URL)
-    .then(r => r.text())
-    .then(text => {
-      const m = text.match(/handleSheetData\(([\s\S]*)\)/);
-      if (m) { loadBank(JSON.parse(m[1])); }
-      else { loadBank(QUESTION_DATA); }
-    })
-    .catch(() => { loadBank(QUESTION_DATA); });
-}
-
 let state = {
   set:null, questions:[], answers:{}, current:0,
   timeLeft:EXAM_DURATION, timerInterval:null,
   violations:0, submitted:false,
   candidateName:'', candidateEmail:'',
-  startTime:null
+  startTime:null,
+  aiViolations: [],
+  pasteAttempts: 0,
+  questionTimes: [],
+  currentQStartTime: 0
 };
 
 function shuffle(arr) {
@@ -379,13 +505,18 @@ function shuffle(arr) {
   return a;
 }
 
+const MCQ_POOL_SIZE = 20; // pick this many MCQs from pool
+
 function buildRandomizedQuestions(setId) {
   const all = QUESTIONS[setId];
   const mcqs = all.filter(q => q.type === 'mcq');
   const scenarios = all.filter(q => q.type === 'scenario');
   const projects = all.filter(q => q.type === 'project');
 
-  const shuffledMCQs = shuffle(mcqs).map(q => {
+  // If pool has more than MCQ_POOL_SIZE, pick random subset
+  const pickedMCQs = shuffle(mcqs).slice(0, Math.min(MCQ_POOL_SIZE, mcqs.length));
+
+  const shuffledMCQs = pickedMCQs.map(q => {
     const indices = q.opts.map((_, i) => i);
     const shuffledIndices = shuffle(indices);
     const newOpts = shuffledIndices.map(i => q.opts[i]);
@@ -398,24 +529,29 @@ function buildRandomizedQuestions(setId) {
 
 function startExam() {
   const name = document.getElementById('candidateName').value.trim();
-  const email = document.getElementById('candidateEmail').value.trim();
+  const email = verifiedEmail;
   const set = document.getElementById('setSelector').value;
-  if (!name||!email||!set){alert('Please fill in all fields and select a test set.');return;}
-  // Email validation
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Please enter a valid email address.');return;}
+  if (!name||!email||!set){alert('Please fill in your name and select a test set.');return;}
   if (!QUESTIONS[set] || QUESTIONS[set].length === 0) { alert('No questions found for this set.'); return; }
   state.candidateName=name; state.candidateEmail=email; state.set=set;
   state.questions=buildRandomizedQuestions(set); state.startTime=Date.now();
   state.totalMCQ = state.questions.filter(q=>q.type==='mcq').length;
   state.totalScenario = state.questions.filter(q=>q.type==='scenario').length;
+  state.currentQStartTime = Date.now();
   document.getElementById('examTitle').textContent=`Salesforce Test — Set ${set}`;
   document.getElementById('candidateBadge').textContent=name;
   showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer();
-  // Start camera FIRST, then go fullscreen AFTER permission is handled
+  // Start camera + mic + video recording + face detection. Then fullscreen. Then proctoring.
   setupProctoring();
 }
 
-document.addEventListener('DOMContentLoaded', initQuestions);
+// On page load: init fingerprint only. Questions load after OTP verification.
+document.addEventListener('DOMContentLoaded', function(){
+  initFingerprint();
+  // Allow Enter key to submit OTP form
+  const otpInput = document.getElementById('otpInput');
+  if (otpInput) otpInput.addEventListener('keydown', function(e){ if(e.key==='Enter') verifyOtp(); });
+});
 
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -439,52 +575,177 @@ function updateTimerDisplay(){
   else if(state.timeLeft<=600)el.className='timer warning';
 }
 
-// ===================== CAMERA PROCTORING =====================
+// ===================== CAMERA + MIC + AI PROCTORING =====================
 let camStream = null;
-let camSnapshots = []; // stores base64 snapshots
-let camInterval = null;
+let mediaRecorder = null;
+let videoChunks = [];
+let faceDetectionInterval = null;
+let audioContext = null;
+let audioAnalyser = null;
+let audioInterval = null;
+let loudnessCounter = 0;
+let noFaceCounter = 0;
+let faceApiReady = false;
 
 async function startCamera() {
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({ video: { width:320, height:240, facingMode:'user' }, audio:false });
+    // Request camera + mic together (one permission prompt)
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { width:320, height:240, facingMode:'user' },
+      audio: true
+    });
     const video = document.getElementById('camVideo');
     video.srcObject = camStream;
     document.getElementById('cameraBox').style.display = 'block';
-    takeSnapshot();
-    camInterval = setInterval(takeSnapshot, 30000);
+
+    // Start video recording
+    startVideoRecording();
+    // Start audio monitoring
+    startAudioMonitoring();
+    // Start face detection (loads models async)
+    startFaceDetection();
   } catch(err) {
-    console.warn('Camera denied:', err);
+    console.warn('Camera/mic denied:', err);
     document.getElementById('camDenied').style.display = 'block';
   }
-  // Go fullscreen AFTER camera permission is resolved (no popup conflict)
+  // Go fullscreen AFTER permissions resolved
   try { await document.documentElement.requestFullscreen(); } catch(e) {}
-  // Enable violation detection AFTER both camera and fullscreen are done
-  setTimeout(function(){ state.proctoringActive = true; }, 1000);
+  setTimeout(function(){ state.proctoringActive = true; }, 1500);
 }
 
-function takeSnapshot() {
+function logAIViolation(type, detail) {
+  const entry = { type, detail, time: new Date().toLocaleTimeString(), elapsed: Math.floor((Date.now()-state.startTime)/1000) };
+  state.aiViolations.push(entry);
+  console.log('AI violation:', entry);
+}
+
+// ---- Face detection via face-api.js ----
+async function startFaceDetection() {
+  if (typeof faceapi === 'undefined') { console.warn('face-api.js not loaded'); return; }
   try {
-    const video = document.getElementById('camVideo');
-    const canvas = document.getElementById('camCanvas');
-    canvas.width = 320; canvas.height = 240;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, 320, 240);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-    camSnapshots.push({ time: new Date().toLocaleTimeString(), img: dataUrl });
-    // Keep max 20 snapshots to avoid memory issues
-    if (camSnapshots.length > 20) camSnapshots.shift();
-  } catch(e) { /* ignore */ }
+    await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+    faceApiReady = true;
+  } catch(err) { console.warn('Face model load failed', err); return; }
+
+  const video = document.getElementById('camVideo');
+  const statusEl = document.getElementById('faceStatus');
+
+  faceDetectionInterval = setInterval(async () => {
+    if (!faceApiReady || video.readyState < 2) return;
+    try {
+      const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }));
+      if (detections.length === 0) {
+        noFaceCounter++;
+        statusEl.textContent = 'No face';
+        statusEl.style.background = 'rgba(245,158,11,0.85)';
+        if (noFaceCounter >= 3 && state.proctoringActive) { // 3 * 5s = 15s of no face
+          logAIViolation('no_face', 'No face visible for 15+ seconds');
+          noFaceCounter = 0;
+        }
+      } else if (detections.length > 1) {
+        noFaceCounter = 0;
+        statusEl.textContent = detections.length + ' faces';
+        statusEl.style.background = 'rgba(239,68,68,0.85)';
+        if (state.proctoringActive) {
+          logAIViolation('multiple_faces', detections.length + ' faces detected');
+        }
+      } else {
+        noFaceCounter = 0;
+        statusEl.textContent = 'Face OK';
+        statusEl.style.background = 'rgba(16,185,129,0.85)';
+      }
+    } catch(e) { /* ignore */ }
+  }, 5000);
+}
+
+// ---- Audio monitoring ----
+function startAudioMonitoring() {
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(camStream);
+    audioAnalyser = audioContext.createAnalyser();
+    audioAnalyser.fftSize = 256;
+    source.connect(audioAnalyser);
+    const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
+    audioInterval = setInterval(() => {
+      if (!state.proctoringActive) return;
+      audioAnalyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+      const avg = sum / dataArray.length;
+      if (avg > 30) { // sustained sound
+        loudnessCounter++;
+        if (loudnessCounter >= 3) { // 3 seconds of sound
+          logAIViolation('voice_detected', 'Voice/loud sound detected (avg volume: ' + Math.round(avg) + ')');
+          loudnessCounter = 0;
+        }
+      } else {
+        loudnessCounter = Math.max(0, loudnessCounter - 1);
+      }
+    }, 1000);
+  } catch(err) { console.warn('Audio monitoring failed:', err); }
+}
+
+// ---- Video recording ----
+function startVideoRecording() {
+  try {
+    const options = { mimeType: 'video/webm;codecs=vp9' };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm';
+    }
+    mediaRecorder = new MediaRecorder(camStream, options);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data); };
+    mediaRecorder.start(5000); // collect data every 5 seconds
+  } catch(err) { console.warn('Video recording failed:', err); }
 }
 
 function stopCamera() {
-  if (camInterval) clearInterval(camInterval);
+  if (faceDetectionInterval) clearInterval(faceDetectionInterval);
+  if (audioInterval) clearInterval(audioInterval);
+  if (audioContext && audioContext.state !== 'closed') { try { audioContext.close(); } catch(e){} }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
   if (camStream) camStream.getTracks().forEach(t => t.stop());
   document.getElementById('cameraBox').style.display = 'none';
+}
+
+// Upload video to Drive via Apps Script (returns URL)
+async function uploadVideoToDrive() {
+  if (!videoChunks.length) return '';
+  try {
+    const blob = new Blob(videoChunks, { type: 'video/webm' });
+    // Only upload if under 25MB to avoid Apps Script limit
+    if (blob.size > 25 * 1024 * 1024) {
+      console.warn('Video too large, skipping upload');
+      return '';
+    }
+    const base64 = await blobToBase64(blob);
+    const res = await fetch(SHEETS_URL, {
+      method: 'POST',
+      mode: 'cors',
+      body: JSON.stringify({ type:'video', email:state.candidateEmail, name:state.candidateName, video:base64 })
+    });
+    const data = await res.json();
+    return data.videoUrl || '';
+  } catch(err) { console.warn('Video upload failed:', err); return ''; }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      // Strip "data:video/webm;base64," prefix
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 // ===================== END CAMERA =====================
 
 function setupProctoring(){
-  state.proctoringActive = false; // Will be set true after camera resolves
+  state.proctoringActive = false;
   startCamera();
   document.addEventListener('visibilitychange',handleVisibility);
   window.addEventListener('blur',handleBlur);
@@ -492,7 +753,17 @@ function setupProctoring(){
   document.addEventListener('keydown',e=>{
     if(e.key==='F12'||(e.ctrlKey&&['u','s','a','c','p'].includes(e.key.toLowerCase()))||(e.ctrlKey&&e.shiftKey&&['i','j','c'].includes(e.key.toLowerCase())))e.preventDefault();
   });
-  // Detect fullscreen exit — count as violation
+  // Block copy / paste / cut during exam — log paste attempts
+  document.addEventListener('copy', e => { if(state.proctoringActive){e.preventDefault();} });
+  document.addEventListener('cut', e => { if(state.proctoringActive){e.preventDefault();} });
+  document.addEventListener('paste', e => {
+    if(state.proctoringActive) {
+      e.preventDefault();
+      state.pasteAttempts++;
+      logAIViolation('paste_attempt', 'Paste blocked at question ' + (state.current+1));
+    }
+  });
+  // Fullscreen exit — violation
   document.addEventListener('fullscreenchange',function(){
     if(!document.fullscreenElement && !state.submitted && state.proctoringActive) handleViolation();
   });
@@ -575,12 +846,19 @@ function renderQuestion(){
 
 function selectOption(i){state.answers[state.current]=i;renderQuestion();}
 function saveText(v){state.answers[state.current]=v;updateGrid();}
+function recordTimeForCurrent() {
+  const elapsed = Math.round((Date.now() - state.currentQStartTime) / 1000);
+  const q = state.questions[state.current];
+  state.questionTimes.push({ idx: state.current, type: q.type, seconds: elapsed });
+  state.currentQStartTime = Date.now();
+}
 function navigate(dir){
+  recordTimeForCurrent();
   const n=state.current+dir;
   if(n<0||n>=state.questions.length){if(dir>0&&state.current===state.questions.length-1)confirmSubmit();return;}
   state.current=n;renderQuestion();
 }
-function goTo(i){state.current=i;renderQuestion();}
+function goTo(i){ recordTimeForCurrent(); state.current=i; renderQuestion(); }
 
 function confirmSubmit(){
   if(confirm('Are you sure you want to submit your exam? This cannot be undone.'))submitExam('manual');
@@ -589,17 +867,34 @@ function confirmSubmit(){
 function submitExam(reason){
   if(state.submitted&&reason!=='auto-violation')return;
   state.submitted=true;
+  recordTimeForCurrent();
   clearInterval(state.timerInterval);
-  takeSnapshot(); // final snapshot
-  stopCamera();
+  // Stop recording first (don't close stream yet, need final chunks)
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder.onstop = () => { finalizeSubmission(); };
+  } else {
+    finalizeSubmission();
+  }
+}
+
+async function finalizeSubmission() {
   document.getElementById('submittingOverlay').classList.add('show');
-  calculateAndSend();
+  const videoUrl = await uploadVideoToDrive();
+  stopCamera();
+  calculateAndSend(videoUrl);
 }
 
 function finalizeAndShow(){
   document.getElementById('autoSubmitOverlay').classList.remove('show');
   document.getElementById('submittingOverlay').classList.add('show');
-  calculateAndSend();
+  // Same flow as submitExam — stop recording, upload, send
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder.onstop = () => { finalizeSubmission(); };
+  } else {
+    finalizeSubmission();
+  }
 }
 
 function getTimeTaken(){
@@ -610,7 +905,7 @@ function getTimeTaken(){
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-function calculateAndSend(){
+function calculateAndSend(videoUrl){
   const mcqs=[];
   state.questions.forEach((q,i)=>{ if(q.type==='mcq') mcqs.push({q,idx:i}); });
   let correct=0,wrong=0,skipped=0;
@@ -624,8 +919,6 @@ function calculateAndSend(){
   const pct=Math.round((correct/totalMCQ)*100);
   const scenarios=state.questions.map((q,i)=>({q,idx:i})).filter(x=>x.q.type==='scenario');
   const projIdx=state.questions.findIndex(q=>q.type==='project');
-  const mcqAnswers={};
-  mcqs.forEach(({q,idx},i)=>{ mcqAnswers[i]=state.answers[idx]; });
 
   const payload={
     name:state.candidateName,
@@ -639,13 +932,17 @@ function calculateAndSend(){
     scenario1:scenarios[0]?state.answers[scenarios[0].idx]||'':'',
     scenario2:scenarios[1]?state.answers[scenarios[1].idx]||'':'',
     project:state.answers[projIdx]||'',
-    mcqAnswers
+    aiViolations: state.aiViolations,
+    pasteAttempts: state.pasteAttempts,
+    deviceFingerprint: deviceFingerprint,
+    videoUrl: videoUrl || '',
+    questionTimes: state.questionTimes
   };
 
-  sendToSheets(payload, correct, wrong, skipped, pct, mcqs);
+  sendToSheets(payload);
 }
 
-async function sendToSheets(payload, correct, wrong, skipped, pct, mcqs){
+async function sendToSheets(payload){
   try {
     await fetch(SHEETS_URL, {
       method:'POST',
@@ -653,57 +950,35 @@ async function sendToSheets(payload, correct, wrong, skipped, pct, mcqs){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
-    document.getElementById('submittingOverlay').classList.remove('show');
-    showResultScreen(correct, wrong, skipped, pct, mcqs, true);
-  } catch(err) {
-    document.getElementById('submittingOverlay').classList.remove('show');
-    showResultScreen(correct, wrong, skipped, pct, mcqs, false);
+  } catch(err) { /* ignore */ }
+  document.getElementById('submittingOverlay').classList.remove('show');
+  showSubmittedScreen();
+}
+
+function showSubmittedScreen(){
+  showScreen('resultScreen');
+  // Exit fullscreen
+  if (document.fullscreenElement) { try { document.exitFullscreen(); } catch(e){} }
+  // Replace entire result card with simple confirmation — NO score, NO review
+  const card = document.querySelector('#resultScreen .result-card');
+  if (card) {
+    card.innerHTML =
+      '<div style="text-align:center;padding:2rem 0;">' +
+      '<div style="width:80px;height:80px;border-radius:50%;background:rgba(16,185,129,0.1);border:2px solid var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;">' +
+        '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+      '</div>' +
+      '<div style="font-size:26px;font-weight:600;margin-bottom:10px;">Exam Submitted</div>' +
+      '<div style="font-size:15px;color:var(--text2);margin-bottom:1.5rem;">Thank you, <strong>' + escapeHtml(state.candidateName) + '</strong>.</div>' +
+      '<div style="background:rgba(59,127,255,0.08);border:1px solid rgba(59,127,255,0.2);border-radius:var(--radius);padding:1rem 1.25rem;font-size:14px;color:var(--text2);line-height:1.7;">' +
+        'Your responses have been recorded. Your results and feedback will be shared with you by your interviewer.' +
+      '</div>' +
+      '<div style="font-size:12px;color:var(--text3);margin-top:1.5rem;">You may now close this window.</div>' +
+      '</div>';
   }
 }
 
-function showResultScreen(correct, wrong, skipped, pct, mcqs, sheetSuccess){
-  showScreen('resultScreen');
-  const passed=pct>=60;
-  document.getElementById('scoreNum').textContent=correct;
-  document.getElementById('scoreDenom').textContent=`/ ${mcqs.length}`;
-  document.getElementById('scoreCircle').className=`score-circle ${passed?'pass':'fail'}`;
-  document.getElementById('resultTitle').textContent=passed?'Well Done!':'Better Luck Next Time';
-  document.getElementById('resultSub').textContent=state.candidateName + ' · Set ' + state.set + ' · ' + (passed?'PASSED':'FAILED');
-  document.getElementById('rsCorrect').textContent=correct;
-  document.getElementById('rsWrong').textContent=wrong;
-  document.getElementById('rsSkipped').textContent=skipped;
-  document.getElementById('rsPercent').textContent=`${pct}%`;
-  document.getElementById('rsPercent').className=`rs-val ${pct>=80?'green':pct>=60?'yellow':'red'}`;
-
-  const statusEl=document.getElementById('sheetStatus');
-  if(SHEETS_URL==='YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'){
-    statusEl.className='sheet-status failed';
-    statusEl.innerHTML='⚠ Google Sheets URL not configured yet. Add your Apps Script URL to the HTML file.';
-  } else if(sheetSuccess){
-    statusEl.className='sheet-status sent';
-    statusEl.innerHTML='✓ Results saved to Google Sheets — interviewer has been notified.';
-  } else {
-    statusEl.className='sheet-status failed';
-    statusEl.innerHTML='✗ Could not reach Google Sheets. Please share this screen with your interviewer.';
-  }
-
-  let reviewHTML='';
-  mcqs.forEach(({q,idx},i)=>{
-    const ans=state.answers[idx];
-    const status=ans===undefined?'skip':ans===q.correct?'correct':'wrong';
-    reviewHTML+=`<div class="answer-row">
-      <span class="ans-q">Q${i+1}. ${q.q.substring(0,52)}${q.q.length>52?'...':''}</span>
-      ${status==='correct'?`<span class="ans-correct">✓ ${String.fromCharCode(65+ans)}</span>`:
-        status==='wrong'?`<span class="ans-wrong">✗ ${String.fromCharCode(65+ans)} (${String.fromCharCode(65+q.correct)})</span>`:
-        `<span class="ans-skip">— (${String.fromCharCode(65+q.correct)})</span>`}
-    </div>`;
-  });
-  document.getElementById('answerReview').innerHTML=reviewHTML;
-
-  if(state.violations>0){
-    document.getElementById('violationResult').innerHTML=`
-      <div class="violation-warning">⚠ ${state.violations} tab switch violation(s) recorded for this submission.</div>`;
-  }
+function escapeHtml(str){
+  return String(str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 </script>
 </body>

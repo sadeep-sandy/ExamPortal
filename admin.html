@@ -439,14 +439,28 @@ function showDetail(idx) {
   if (r['Scenario 2']) html += `<div class="section"><div class="section-title">Scenario 2</div><div class="answer-box">${escapeHtml(r['Scenario 2'])}</div></div>`;
   if (r.Project) html += `<div class="section"><div class="section-title">Project</div><div class="answer-box">${escapeHtml(r.Project)}</div></div>`;
 
+  // Action buttons row (certificate + reset)
+  const resetFlag = String(r['Reset (YES to allow retake)'] || '').toUpperCase().trim();
+  const isReset = resetFlag === 'YES';
+  html += `<div class="cert-btn-row">`;
+
   // Certificate button (only if PASSED)
   if (String(r.Result).toUpperCase() === 'PASSED') {
     const existingCert = r['Certificate URL'];
-    html += `<div class="cert-btn-row">
-      ${existingCert ? `<a href="${escapeHtml(existingCert)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">📄 View Certificate</a>` : ''}
-      <button class="btn btn-success btn-sm" onclick="issueCertificate(${r._rowNumber})" id="certBtn_${r._rowNumber}">🎓 ${existingCert ? 'Resend' : 'Issue'} Certificate</button>
-    </div>`;
+    if (existingCert) {
+      html += `<a href="${escapeHtml(existingCert)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">📄 View Certificate</a>`;
+    }
+    html += `<button class="btn btn-success btn-sm" onclick="issueCertificate(${r._rowNumber})" id="certBtn_${r._rowNumber}">🎓 ${existingCert ? 'Resend' : 'Issue'} Certificate</button>`;
   }
+
+  // Reset button (always shown — allows retake)
+  if (isReset) {
+    html += `<span class="btn btn-ghost btn-sm" style="background:rgba(245,158,11,0.15);color:#fcd34d;cursor:default;">✓ Retake Allowed</span>`;
+  } else {
+    html += `<button class="btn btn-danger btn-sm" onclick="resetCandidate(${r._rowNumber})" id="resetBtn_${r._rowNumber}">🔄 Allow Retake</button>`;
+  }
+
+  html += `</div>`;
 
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalBackdrop').classList.add('show');
@@ -477,6 +491,31 @@ async function issueCertificate(rowNumber) {
   } catch(err) {
     btn.disabled = false;
     btn.textContent = '🎓 Issue Certificate';
+    alert('Error: ' + err.message);
+  }
+}
+
+async function resetCandidate(rowNumber) {
+  const btn = document.getElementById('resetBtn_' + rowNumber);
+  if (!btn) return;
+  if (!confirm('Allow this candidate to retake the exam?\n\nThis will mark their submission as "Reset" — they can take the exam again with the same email.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Resetting...';
+  try {
+    const url = SHEETS_URL + '?action=resetCandidate&password=' + encodeURIComponent(adminPassword) + '&row=' + rowNumber;
+    const res = await jsonpRequest(url);
+    if (res.success) {
+      btn.textContent = '✓ Retake Allowed';
+      btn.style.background = 'var(--success)';
+      setTimeout(() => { closeModal(); loadResults(); }, 1200);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '🔄 Allow Retake';
+      alert('Failed: ' + (res.error || 'Unknown error'));
+    }
+  } catch(err) {
+    btn.disabled = false;
+    btn.textContent = '🔄 Allow Retake';
     alert('Error: ' + err.message);
   }
 }

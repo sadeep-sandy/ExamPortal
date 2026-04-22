@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Salesforce Training Assessment</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233b7fff'/%3E%3Ctext x='50' y='74' font-family='Arial,sans-serif' font-size='70' font-weight='700' fill='white' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<title>Fingertip — Training Assessment</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231a73ff'/%3E%3Ctext x='50' y='74' font-family='Helvetica,Arial,sans-serif' font-size='72' font-weight='800' fill='white' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- Face detection (browser-based AI) -->
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
@@ -19,8 +19,8 @@
     --surface2: #1a2235;
     --border: rgba(255,255,255,0.08);
     --border2: rgba(255,255,255,0.14);
-    --accent: #3b7fff;
-    --accent2: #60a5fa;
+    --accent: #1a73ff;
+    --accent2: #4d93ff;
     --text: #f0f4ff;
     --text2: #8b9ab5;
     --text3: #4a5568;
@@ -171,13 +171,12 @@
 <!-- ===================== LOGIN ===================== -->
 <div id="loginScreen" class="screen active">
   <div class="login-card">
-    <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+    <div class="brand" style="margin-bottom:2rem;align-items:center;">
+      <div style="background:white;padding:8px 12px;border-radius:8px;">
+        <img src="https://i.postimg.cc/zfzwSwwq/Screenshot-2026-04-22-120938.png" alt="Fingertip" style="height:32px;width:auto;display:block;" />
       </div>
-      <div>
-        <div class="brand-text">Salesforce Training</div>
-        <div class="brand-sub">Assessment Portal</div>
+      <div style="flex:1;text-align:right;">
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Training Assessment Portal</div>
       </div>
     </div>
     <div class="login-title">Start Your Test</div>
@@ -243,7 +242,7 @@
 <div id="examScreen" class="screen">
   <div class="exam-header">
     <div class="exam-info">
-      <div class="exam-title" id="examTitle">Salesforce Test</div>
+      <div class="exam-title" id="examTitle">Fingertip Assessment</div>
       <div class="badge" id="candidateBadge">Candidate</div>
     </div>
     <div class="exam-controls">
@@ -565,20 +564,23 @@ function startExam() {
   state.timeLeft = settings.durationMinutes * 60;
   state.passThreshold = settings.passThreshold;
 
-  document.getElementById('examTitle').textContent=`Salesforce Test — Set ${set}`;
+  document.getElementById('examTitle').textContent=`Fingertip Assessment — Set ${set}`;
   document.getElementById('candidateBadge').textContent=name;
   updateTimerDisplay();
   showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer();
+  saveExamState(); // capture initial state for resume
   // Start camera + mic + video recording + face detection. Then fullscreen. Then proctoring.
   setupProctoring();
 }
 
-// On page load: init fingerprint only. Questions load after OTP verification.
+// On page load: init fingerprint + check for interrupted exam
 document.addEventListener('DOMContentLoaded', function(){
   initFingerprint();
   // Allow Enter key to submit OTP form
   const otpInput = document.getElementById('otpInput');
   if (otpInput) otpInput.addEventListener('keydown', function(e){ if(e.key==='Enter') verifyOtp(); });
+  // Check if there's an in-progress exam saved from a previous session
+  setTimeout(checkResumeOnLoad, 500); // small delay so page is fully rendered before prompt
 });
 
 function showScreen(id){
@@ -591,7 +593,109 @@ function startTimer(){
     state.timeLeft--;
     updateTimerDisplay();
     if(state.timeLeft<=0){clearInterval(state.timerInterval);submitExam('timeout');}
+    // Save state to localStorage every 5 seconds for resume-on-crash
+    if (state.timeLeft % 5 === 0) saveExamState();
   },1000);
+}
+
+// ===================== EXAM STATE PERSISTENCE (resume after crash) =====================
+const RESUME_STORAGE_KEY = 'examInProgress';
+
+function saveExamState() {
+  if (state.submitted) return;
+  try {
+    // Capture current Monaco answer if present
+    if (codeEditorInstance) {
+      state.answers[state.current] = codeEditorInstance.getValue();
+    }
+    const snapshot = {
+      email: state.candidateEmail,
+      name: state.candidateName,
+      set: state.set,
+      questions: state.questions,
+      answers: state.answers,
+      current: state.current,
+      timeLeft: state.timeLeft,
+      totalMCQ: state.totalMCQ,
+      totalCoding: state.totalCoding,
+      totalScenario: state.totalScenario,
+      passThreshold: state.passThreshold,
+      violations: state.violations,
+      aiViolations: state.aiViolations,
+      pasteAttempts: state.pasteAttempts,
+      questionTimes: state.questionTimes,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch(e) { /* ignore */ }
+}
+
+function clearExamState() {
+  try { localStorage.removeItem(RESUME_STORAGE_KEY); } catch(e){}
+}
+
+function loadExamState() {
+  try {
+    const raw = localStorage.getItem(RESUME_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // Expire resumable state after 2 hours
+    if (Date.now() - data.savedAt > 2 * 60 * 60 * 1000) {
+      clearExamState();
+      return null;
+    }
+    // Must have at least 30 seconds left to be resumable
+    if (!data.timeLeft || data.timeLeft < 30) {
+      clearExamState();
+      return null;
+    }
+    return data;
+  } catch(e) { return null; }
+}
+
+function resumeExam(savedState) {
+  // Restore state
+  state.candidateEmail = savedState.email;
+  state.candidateName = savedState.name;
+  state.set = savedState.set;
+  state.questions = savedState.questions;
+  state.answers = savedState.answers || {};
+  state.current = savedState.current || 0;
+  state.timeLeft = savedState.timeLeft;
+  state.totalMCQ = savedState.totalMCQ;
+  state.totalCoding = savedState.totalCoding;
+  state.totalScenario = savedState.totalScenario;
+  state.passThreshold = savedState.passThreshold || 60;
+  state.violations = savedState.violations || 0;
+  state.aiViolations = savedState.aiViolations || [];
+  state.pasteAttempts = savedState.pasteAttempts || 0;
+  state.questionTimes = savedState.questionTimes || [];
+  state.startTime = Date.now() - ((savedState.totalMCQ * 60) - state.timeLeft) * 1000;
+  state.currentQStartTime = Date.now();
+
+  verifiedEmail = savedState.email;
+  document.getElementById('examTitle').textContent = `Fingertip Assessment — Set ${state.set}`;
+  document.getElementById('candidateBadge').textContent = state.name || state.candidateName;
+  document.getElementById('violationBadge').textContent = `Violations: ${state.violations}`;
+  showScreen('examScreen');
+  buildQGrid();
+  renderQuestion();
+  updateTimerDisplay();
+  startTimer();
+  setupProctoring();
+}
+
+function checkResumeOnLoad() {
+  const saved = loadExamState();
+  if (!saved) return;
+  const minutes = Math.floor(saved.timeLeft / 60);
+  const seconds = saved.timeLeft % 60;
+  const msg = `You have an exam in progress!\n\nEmail: ${saved.email}\nSet: ${saved.set}\nTime remaining: ${minutes}m ${seconds}s\n\nResume this exam?`;
+  if (confirm(msg)) {
+    resumeExam(saved);
+  } else {
+    clearExamState();
+  }
 }
 
 function updateTimerDisplay(){
@@ -1089,6 +1193,7 @@ async function sendToSheets(payload){
       body:JSON.stringify(payload)
     });
   } catch(err) { /* ignore */ }
+  clearExamState(); // clear localStorage — exam no longer resumable
   document.getElementById('submittingOverlay').classList.remove('show');
   showSubmittedScreen();
 }

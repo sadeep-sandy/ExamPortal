@@ -10,6 +10,8 @@
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <!-- Device fingerprinting -->
 <script src="https://openfpcdn.io/fingerprintjs/v4/iife.min.js"></script>
+<!-- Monaco code editor (VS Code) for coding questions -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -149,6 +151,12 @@
   .ans-skip { color: var(--text3); white-space: nowrap; }
   .violation-warning { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: #fca5a5; margin-top: 1rem; text-align: center; }
 
+  /* Coding question editor */
+  .code-editor-wrap { border: 1px solid var(--border2); border-radius: var(--radius); overflow: hidden; background: #1e1e1e; margin-bottom: 1rem; }
+  .code-editor-toolbar { background: var(--surface2); padding: 8px 14px; font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+  .code-editor-lang { font-family: 'DM Mono', monospace; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; font-weight: 600; }
+  .code-editor-container { height: 400px; }
+
   /* Camera proctoring */
   .camera-box { position: fixed; bottom: 20px; right: 20px; z-index: 200; border-radius: var(--radius); overflow: hidden; border: 2px solid var(--border2); background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
   .camera-box video { width: 180px; height: 135px; object-fit: cover; display: block; }
@@ -263,6 +271,7 @@
         <div class="stat-row"><span class="stat-label">Answered</span><span class="stat-val" id="statAnswered">0</span></div>
         <div class="stat-row"><span class="stat-label">Remaining</span><span class="stat-val" id="statRemaining">23</span></div>
         <div class="stat-row"><span class="stat-label">MCQ</span><span class="stat-val" id="statMCQ">0/20</span></div>
+        <div class="stat-row"><span class="stat-label">Coding</span><span class="stat-val" id="statCoding">0/0</span></div>
         <div class="stat-row"><span class="stat-label">Scenario</span><span class="stat-val" id="statScenario">0/2</span></div>
       </div>
     </div>
@@ -461,8 +470,11 @@ function loadQuestions() {
 // Fallback questions (used if live fetch fails on file://)
 const QUESTION_DATA = {"A":{"mcq":[{"question":"Which of the following is an example of SaaS?","options":["AWS EC2","Microsoft Azure","Gmail","Google Compute Engine"],"answer":"C"},{"question":"What is the primary purpose of Governor Limits in Salesforce?","options":["To restrict admin access","To ensure fair resource usage in multi-tenant architecture","To limit the number of users per org","To prevent API integrations"],"answer":"B"},{"question":"Which Salesforce edition is best suited for developers to build and test apps for free?","options":["Essentials","Professional","Unlimited","Developer"],"answer":"D"},{"question":"What suffix is used for custom object API names in Salesforce?","options":["__r","__x","__c","__s"],"answer":"C"},{"question":"Which field type automatically calculates a value based on other fields?","options":["Auto-Number","Roll-Up Summary","Formula","Text"],"answer":"C"},{"question":"In a Master-Detail relationship, what happens to child records when the parent is deleted?","options":["Child records become orphaned","Child records are archived","Child records are also deleted","Child records are reassigned"],"answer":"C"},{"question":"Which relationship type is ONLY available on the User object?","options":["Self Relationship","Hierarchical Relationship","External Lookup","Indirect Lookup"],"answer":"B"},{"question":"What is the maximum number of Web-to-Lead submissions Salesforce processes per day?","options":["100","250","500","1000"],"answer":"C"},{"question":"Which OWD setting gives users access only to records they own?","options":["Public Read Only","Public Read/Write","Controlled by Parent","Private"],"answer":"D"},{"question":"What is the difference between a Profile and a Permission Set?","options":["Profiles are additive; Permission Sets are restrictive","Permission Sets are additive; Profiles define baseline access","Both work the same way","Permission Sets replace Profiles in Lightning"],"answer":"B"},{"question":"Which report format allows combining data from multiple report types?","options":["Summary","Matrix","Joined","Tabular"],"answer":"C"},{"question":"Which Flow type runs before a record is saved to the database?","options":["Screen Flow","Scheduled Flow","Before Save Record-Triggered Flow","Platform Event Flow"],"answer":"C"},{"question":"In an Approval Process, which action can be configured upon rejection?","options":["Launch a Screen Flow","Field Update","Create a report","Send a survey"],"answer":"B"},{"question":"What is the purpose of a Junction Object?","options":["To link two orgs together","To implement Many-to-Many relationships","To create self-referencing relationships","To store metadata configuration"],"answer":"B"},{"question":"Which Service Cloud component allows agents to handle multiple cases in one tab?","options":["Knowledge Base","Case Escalation Rule","Service Console","Entitlement Process"],"answer":"C"},{"question":"What does OWD stand for?","options":["Object-Wide Definition","Organization-Wide Defaults","Object Writing Defaults","Org-Wide Data"],"answer":"B"},{"question":"Which validation rule function checks if a field value changed during an edit?","options":["ISNEW()","ISBLANK()","PRIORVALUE()","ISCHANGED()"],"answer":"D"},{"question":"What is the purpose of Custom Metadata Types over Custom Settings?","options":["Support more field types","They are deployable and packageable","Allow more records","Work only in Classic"],"answer":"B"},{"question":"In a Role Hierarchy, what does assigning a role to a user do?","options":["Restricts access below the OWD","Opens access to records owned by users below in hierarchy","Replaces Profile permissions","Grants Modify All Data"],"answer":"B"},{"question":"Which Flow element is used to iterate over a collection of records?","options":["Decision","Assignment","Loop","Subflow"],"answer":"C"}],"scenarios":[],"project":null},"B":{"mcq":[{"question":"Which cloud service model provides virtualized computing resources like servers and storage?","options":["SaaS","PaaS","IaaS","DaaS"],"answer":"C"},{"question":"What is Metadata-driven architecture in Salesforce?","options":["Storing all data in JSON format","Storing customizations as metadata rather than hard-coded changes","Using REST API for all data access","Building apps using only Apex code"],"answer":"B"},{"question":"Which license type gives access only to Salesforce collaboration features?","options":["Salesforce License","Platform License","Chatter License","Community License"],"answer":"C"},{"question":"When should you create a Custom Object instead of using a Standard Object?","options":["Whenever you need more than 10 fields","When no standard object fits your business need","When you need reports","When the object needs a tab"],"answer":"B"},{"question":"Which field type allows selecting multiple values from a list?","options":["Picklist","Multi-Select Picklist","Text","Lookup"],"answer":"B"},{"question":"In a Lookup relationship, what happens to child records when the parent is deleted?","options":["Child records are deleted","Child records are archived","The lookup field is set to null","Child records move to recycle bin"],"answer":"C"},{"question":"Which Schema Builder limitation is true?","options":["Cannot view existing relationships","Cannot create Roll-Up Summary fields","Cannot create custom objects","Cannot display standard objects"],"answer":"B"},{"question":"What is the purpose of a Dependent Picklist?","options":["To auto-populate a field based on a formula","To filter available values based on a controlling field","To create a roll-up of picklist values","To restrict picklist values by Profile"],"answer":"B"},{"question":"Which standard object tracks marketing initiatives and their ROI?","options":["Opportunity","Lead","Campaign","Case"],"answer":"C"},{"question":"What is the purpose of Case Entitlements in Service Cloud?","options":["To assign cases to queues","To define and enforce SLA agreements","To auto-respond to case emails","To escalate cases after 24 hours"],"answer":"B"},{"question":"What is a Permission Set Group?","options":["A group of users with same permissions","A bundle of multiple Permission Sets","A set of profiles combined","An OWD override"],"answer":"B"},{"question":"Which sharing method allows a record owner to manually share a single record?","options":["Sharing Rule","Role Hierarchy","Manual Sharing","Permission Set"],"answer":"C"},{"question":"In Flow Builder, which element retrieves records from Salesforce?","options":["Assignment","Get Records","Create Records","Decision"],"answer":"B"},{"question":"What is the difference between Before Save and After Save Record-Triggered Flows?","options":["Before Save can send emails; After Save cannot","Before Save updates fields without a DML; After Save commits first then runs","After Save is faster","Before Save runs after approval processes"],"answer":"B"},{"question":"Which report format allows grouping by both rows and columns?","options":["Tabular","Summary","Matrix","Joined"],"answer":"C"},{"question":"What is the purpose of Dynamic Forms in Lightning Record Pages?","options":["To auto-submit forms on record save","To show/hide individual fields based on conditions","To create forms using Flows","To replace Page Layouts entirely"],"answer":"B"},{"question":"Which object setting must be enabled to use Roll-Up Summary fields?","options":["Allow Reports","Allow Search","Track Field History","Master-Detail relationship on child object"],"answer":"D"},{"question":"What is the primary use of Custom Labels in Salesforce?","options":["To create custom field labels on page layouts","To support multi-language text used in formulas and code","To label custom apps in App Manager","To rename standard object labels"],"answer":"B"},{"question":"In Lead Conversion, which records can be created?","options":["Account and Contact only","Contact and Opportunity only","Account, Contact, and Opportunity","Account, Contact, Case, and Opportunity"],"answer":"C"},{"question":"What does the Forecast Category Commit indicate in an Opportunity?","options":["Deal is lost","Deal is in early stage","Sales rep is confident the deal will close","Deal requires manager approval"],"answer":"C"}],"scenarios":[{"label":"Scenario 1","context":"A company receives 200+ emails daily as cases. High-priority cases from enterprise clients must be escalated to a senior agent if not resolved within 4 hours during business hours.","question":"How would you configure Email-to-Case, Case Assignment Rules, Entitlements, and Escalation Rules?"},{"label":"Scenario 2","context":"A sales manager reports: Our reps are losing deals because they don't know what to do at each opportunity stage.","question":"How would you use the Path Component, Guidance for Success, and a Record-Triggered Flow to guide reps and automate next steps?"}],"project":{"title":"Employee Onboarding System","description":"Build an Employee Onboarding Tracker:\n - Objects: Employee, Department, Onboarding Task, Training Course, Task Assignment (junction)\n - Formula fields: Days since joining, Onboarding completion %\n - Validation rules: Joining date cannot be in past, mandatory department\n - 3 Record Types: Full-Time, Contract, Intern\n - Screen Flow: Multi-step onboarding form\n - Scheduled Flow: Flag incomplete onboarding after 7 days\n - Approval Process: Training course enrollment needs HR approval\n - Dashboard: Onboarding status by dept, overdue tasks, new hires this month"}},"C":{"mcq":[{"question":"Salesforce is primarily classified as which type of cloud service?","options":["IaaS","PaaS only","SaaS and PaaS","Private Cloud"],"answer":"C"},{"question":"How does Salesforce keep one customer's data isolated in a multi-tenant environment?","options":["Separate databases per customer","Virtual machines per org","Metadata and tenant ID tagging","Encrypted file partitions"],"answer":"C"},{"question":"Which Salesforce edition includes the most features including unlimited sandboxes?","options":["Enterprise","Professional","Unlimited","Developer"],"answer":"C"},{"question":"What is AppExchange?","options":["Salesforce's API marketplace","Salesforce's marketplace for third-party apps and components","A tool to exchange data between orgs","A platform for building custom APIs"],"answer":"B"},{"question":"Which field type displays the total value of all related child records on a parent?","options":["Formula","Currency","Roll-Up Summary","Number"],"answer":"C"},{"question":"What is a Self Relationship in Salesforce?","options":["A field that references itself","A lookup from an object back to the same object","A relationship between two standard objects","A relationship used only in reports"],"answer":"B"},{"question":"Which of the following is NOT a valid Roll-Up Summary function?","options":["SUM","COUNT","AVG","MAX"],"answer":"C"},{"question":"What does Field-Level Security control?","options":["Which users can create records","Whether a field is visible or editable per profile","Which fields appear on page layouts","Which fields are required during record creation"],"answer":"B"},{"question":"In a Page Layout Assignment, which three elements form the assignment matrix?","options":["User, Object, Field","Profile, Record Type, Page Layout","Role, Permission Set, Profile","Object, App, Profile"],"answer":"B"},{"question":"Which Opportunity field auto-maps based on the selected Stage?","options":["Close Date","Amount","Forecast Category and Probability","Account Name"],"answer":"C"},{"question":"What is the purpose of a Public Group in Salesforce?","options":["To group records for reporting","To bundle users, roles, and subordinates for sharing rules","To assign profiles to multiple users at once","To grant system admin access to a group"],"answer":"B"},{"question":"Which Knowledge feature allows categorizing articles for targeted visibility?","options":["Article Versioning","Data Categories","Article Types","Knowledge Queues"],"answer":"B"},{"question":"In Flows, what is a Fault Connector used for?","options":["To debug flow variables","To handle errors when an element fails","To connect two screen flows","To trigger a flow from an error log"],"answer":"B"},{"question":"What is the key difference between Criteria-based and Owner-based Sharing Rules?","options":["Owner-based rules are more secure","Criteria-based shares records matching field criteria; Owner-based shares by ownership","Criteria-based rules override OWD completely","Owner-based rules only work with Private OWD"],"answer":"B"},{"question":"Which dashboard component is best for showing a single KPI number like Total Revenue?","options":["Chart","Gauge","Table","Metric"],"answer":"D"},{"question":"What is the purpose of a Scheduled Flow?","options":["To run a flow when a record is updated","To process batches of records at a defined time/frequency","To schedule page layout changes","To trigger approval processes at midnight"],"answer":"B"},{"question":"A formula field uses TODAY() - Joining_Date__c. What does this return?","options":["The joining date as text","Number of days since the student joined","A boolean checking if they joined today","The next anniversary date"],"answer":"B"},{"question":"Which Salesforce feature tracks changes made to specific fields over time?","options":["Formula Fields","Validation Rules","Field History Tracking","Audit Trail"],"answer":"C"},{"question":"What is the correct order of execution when a record is saved?","options":["Triggers → Validation Rules → Flows → Workflow","Validation Rules → Before Triggers → Before Save Flows → After Triggers","Flows → Triggers → Validation Rules → Process Builder","Workflow → Approval Process → Triggers → Flows"],"answer":"B"},{"question":"Which Lightning App Builder component shows/hides fields individually based on record data?","options":["Record Detail Component","Dynamic Forms","Related List Component","Highlights Panel"],"answer":"B"}],"scenarios":[{"label":"Scenario 1","context":"A retail company: When a high-value Opportunity (Amount > 10,00,000) moves to Negotiation stage, a discount approval task should be created and sent to Sales Manager. If rejected, revert stage to Proposal.","question":"Design the Approval Process step by step. What entry criteria, approver settings, and approval/rejection actions would you configure?"},{"label":"Scenario 2","context":"A new admin notices that Sales Reps in Region A can see Leads owned by Reps in Region B, even though OWD for Lead is set to Private.","question":"Walk through all possible reasons (Role Hierarchy, Sharing Rules, Manual Sharing, Permission Sets) and explain how to audit and fix each one."}],"project":{"title":"Hospital Patient Management System","description":"Build a Hospital Patient Management System:\n - Objects: Patient, Doctor, Department, Appointment, Medical Record\n - Formula fields: Patient age from DOB, days since last appointment\n - Validation rules: Appointment date cannot be in past, phone must be 10 digits (REGEX)\n - 3 Record Types: OPD, IPD, Emergency\n - Before Save Flow: Auto-assign Department based on selected Doctor\n - After Save Flow: When Appointment=Completed, auto-create Medical Record\n - Screen Flow: Patient registration multi-step form\n - Approval Process: IPD admission requires Doctor + HOD approval\n - Dashboard: 5 components"}}};
 
+let QUESTION_SETTINGS = {}; // per-set settings (duration, passThreshold)
+
 function loadBank(bank) {
   QUESTIONS = {};
+  QUESTION_SETTINGS = {};
   const setSel = document.getElementById('setSelector');
   setSel.innerHTML = '<option value="">— Select a set —</option>';
   const setLabels = { A:'Set A', B:'Set B', C:'Set C', D:'Set D', E:'Set E' };
@@ -471,6 +483,9 @@ function loadBank(bank) {
     if (setData.mcq) setData.mcq.forEach(m => {
       questions.push({ type:'mcq', q:m.question, opts:m.options, correct:letterToIndex(m.answer) });
     });
+    if (setData.coding) setData.coding.forEach((c,i) => {
+      questions.push({ type:'coding', label:'Coding '+(i+1), q:c.question, language:c.language||'javascript', starter:c.starter||'', keywords:c.keywords||[] });
+    });
     if (setData.scenarios) setData.scenarios.forEach((s,i) => {
       questions.push({ type:'scenario', label:s.label||'Scenario '+(i+1), context:s.context, q:s.question });
     });
@@ -478,9 +493,11 @@ function loadBank(bank) {
       questions.push({ type:'project', label:'Project', title:setData.project.title||'Project', q:setData.project.description });
     }
     QUESTIONS[setId] = questions;
+    QUESTION_SETTINGS[setId] = setData.settings || { durationMinutes: 45, passThreshold: 60 };
     const opt = document.createElement('option');
     opt.value = setId;
-    opt.textContent = (setLabels[setId]||'Set '+setId) + ' (' + questions.length + ' questions)';
+    const dur = QUESTION_SETTINGS[setId].durationMinutes;
+    opt.textContent = (setLabels[setId]||'Set '+setId) + ' · ' + questions.length + ' questions · ' + dur + ' min';
     setSel.appendChild(opt);
   }
 }
@@ -511,6 +528,7 @@ const MCQ_POOL_SIZE = 20; // pick this many MCQs from pool
 function buildRandomizedQuestions(setId) {
   const all = QUESTIONS[setId];
   const mcqs = all.filter(q => q.type === 'mcq');
+  const coding = all.filter(q => q.type === 'coding');
   const scenarios = all.filter(q => q.type === 'scenario');
   const projects = all.filter(q => q.type === 'project');
 
@@ -525,7 +543,8 @@ function buildRandomizedQuestions(setId) {
     return { ...q, opts: newOpts, correct: newCorrect };
   });
 
-  return [...shuffledMCQs, ...shuffle(scenarios), ...projects];
+  // Order: MCQ → Coding → Scenarios → Project
+  return [...shuffledMCQs, ...shuffle(coding), ...shuffle(scenarios), ...projects];
 }
 
 function startExam() {
@@ -537,10 +556,18 @@ function startExam() {
   state.candidateName=name; state.candidateEmail=email; state.set=set;
   state.questions=buildRandomizedQuestions(set); state.startTime=Date.now();
   state.totalMCQ = state.questions.filter(q=>q.type==='mcq').length;
+  state.totalCoding = state.questions.filter(q=>q.type==='coding').length;
   state.totalScenario = state.questions.filter(q=>q.type==='scenario').length;
   state.currentQStartTime = Date.now();
+
+  // Apply per-set settings (duration + pass threshold) from Settings tab
+  const settings = QUESTION_SETTINGS[set] || { durationMinutes: 45, passThreshold: 60 };
+  state.timeLeft = settings.durationMinutes * 60;
+  state.passThreshold = settings.passThreshold;
+
   document.getElementById('examTitle').textContent=`Salesforce Test — Set ${set}`;
   document.getElementById('candidateBadge').textContent=name;
+  updateTimerDisplay();
   showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer();
   // Start camera + mic + video recording + face detection. Then fullscreen. Then proctoring.
   setupProctoring();
@@ -754,16 +781,23 @@ function setupProctoring(){
   document.addEventListener('keydown',e=>{
     if(e.key==='F12'||(e.ctrlKey&&['u','s','a','c','p'].includes(e.key.toLowerCase()))||(e.ctrlKey&&e.shiftKey&&['i','j','c'].includes(e.key.toLowerCase())))e.preventDefault();
   });
-  // Block copy / paste / cut during exam — log paste attempts
+  // Block copy / cut during exam
   document.addEventListener('copy', e => { if(state.proctoringActive){e.preventDefault();} });
   document.addEventListener('cut', e => { if(state.proctoringActive){e.preventDefault();} });
+  // Paste: allowed inside Monaco code editor only, blocked elsewhere
   document.addEventListener('paste', e => {
-    if(state.proctoringActive) {
-      e.preventDefault();
-      state.pasteAttempts++;
-      logAIViolation('paste_attempt', 'Paste blocked at question ' + (state.current+1));
+    if(!state.proctoringActive) return;
+    // Check if paste target is within the coding editor container
+    const codeEditor = document.getElementById('codeEditor');
+    if (codeEditor && codeEditor.contains(e.target)) {
+      // Allow paste inside Monaco — do nothing
+      return;
     }
-  });
+    // Block paste everywhere else
+    e.preventDefault();
+    state.pasteAttempts++;
+    logAIViolation('paste_attempt', 'Paste blocked at question ' + (state.current+1));
+  }, true); // capture phase so we intercept before Monaco's own handlers
   // Fullscreen exit — violation
   document.addEventListener('fullscreenchange',function(){
     if(!document.fullscreenElement && !state.submitted && state.proctoringActive) handleViolation();
@@ -805,15 +839,21 @@ function updateGrid(){
   });
   const answered=Object.keys(state.answers).length,total=state.questions.length;
   const mcqAns=Object.keys(state.answers).filter(i=>state.questions[i].type==='mcq').length;
+  const codingAns=Object.keys(state.answers).filter(i=>state.questions[i].type==='coding' && String(state.answers[i]||'').trim().length>0).length;
   const scAns=Object.keys(state.answers).filter(i=>state.questions[i].type==='scenario').length;
   document.getElementById('statAnswered').textContent=answered;
   document.getElementById('statRemaining').textContent=total-answered;
   document.getElementById('statMCQ').textContent=`${mcqAns}/${state.totalMCQ||0}`;
+  const statCodingEl=document.getElementById('statCoding');
+  if(statCodingEl) statCodingEl.textContent=`${codingAns}/${state.totalCoding||0}`;
   document.getElementById('statScenario').textContent=`${scAns}/${state.totalScenario||0}`;
   document.getElementById('progressBar').style.width=`${(answered/total)*100}%`;
 }
 
 function renderQuestion(){
+  // Dispose any previous Monaco editor
+  disposeCodeEditor();
+
   const q=state.questions[state.current],total=state.questions.length;
   document.getElementById('prevBtn').disabled=state.current===0;
   document.getElementById('nextBtn').textContent=state.current===total-1?'Finish ✓':'Next →';
@@ -826,15 +866,30 @@ function renderQuestion(){
         <div class="option ${state.answers[state.current]===i?'selected':''}" onclick="selectOption(${i})">
           <div class="option-letter">${String.fromCharCode(65+i)}</div><span>${o}</span>
         </div>`).join('')}</div>`;
+  } else if(q.type==='coding'){
+    const idx = state.current;
+    const saved = state.answers[idx] !== undefined ? state.answers[idx] : (q.starter || '');
+    html=`<div class="section-label">Section 2 — Coding Question</div>
+      <div class="q-number">${q.label} &nbsp;·&nbsp; 10 marks</div>
+      <div class="q-text">${q.q}</div>
+      <div class="code-editor-wrap">
+        <div class="code-editor-toolbar">
+          <span class="code-editor-lang">${q.language}</span>
+          <span style="font-size:11px;color:var(--text3);">Tip: paste is allowed in this editor</span>
+        </div>
+        <div id="codeEditor" class="code-editor-container"></div>
+      </div>`;
+    // Initialize Monaco after DOM update
+    setTimeout(() => initCodeEditor(q.language, saved), 0);
   } else if(q.type==='scenario'){
-    html=`<div class="section-label">Section 2 — Scenario Question</div>
+    html=`<div class="section-label">Section 3 — Scenario Question</div>
       <div class="q-number">${q.label} &nbsp;·&nbsp; 3 marks</div>
       <div class="scenario-box"><strong>Situation:</strong><br>${q.context}</div>
       <div class="q-text">${q.q}</div>
       <textarea class="textarea-input" placeholder="Write your answer here..." rows="8"
         oninput="saveText(this.value)">${state.answers[state.current]||''}</textarea>`;
   } else {
-    html=`<div class="section-label">Section 3 — Project</div>
+    html=`<div class="section-label">Section 4 — Project</div>
       <div class="q-number">${q.label}: ${q.title} &nbsp;·&nbsp; Practical</div>
       <div class="q-text">Project Requirements:</div>
       <div class="scenario-box" style="white-space:pre-line;">${q.q}</div>
@@ -843,6 +898,51 @@ function renderQuestion(){
   }
   document.getElementById('questionContent').innerHTML=html;
   updateGrid();
+}
+
+// ===== Monaco code editor =====
+let codeEditorInstance = null;
+let monacoLoaded = false;
+
+function initCodeEditor(language, initialValue) {
+  const container = document.getElementById('codeEditor');
+  if (!container) return;
+
+  const setupEditor = () => {
+    // Map some aliases
+    const langMap = { apex:'java', soql:'sql', sfdc:'java' };
+    const monacoLang = langMap[language] || language || 'javascript';
+
+    codeEditorInstance = monaco.editor.create(container, {
+      value: initialValue,
+      language: monacoLang,
+      theme: 'vs-dark',
+      automaticLayout: true,
+      fontSize: 14,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      wordWrap: 'on',
+      tabSize: 2
+    });
+    codeEditorInstance.onDidChangeModelContent(() => {
+      state.answers[state.current] = codeEditorInstance.getValue();
+      updateGrid();
+    });
+  };
+
+  if (monacoLoaded) {
+    setupEditor();
+  } else {
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+    require(['vs/editor/editor.main'], () => { monacoLoaded = true; setupEditor(); });
+  }
+}
+
+function disposeCodeEditor() {
+  if (codeEditorInstance) {
+    try { codeEditorInstance.dispose(); } catch(e){}
+    codeEditorInstance = null;
+  }
 }
 
 function selectOption(i){state.answers[state.current]=i;renderQuestion();}
@@ -869,8 +969,12 @@ function submitExam(reason){
   if(state.submitted&&reason!=='auto-violation')return;
   state.submitted=true;
   recordTimeForCurrent();
+  // Capture final coding answer from Monaco if we're currently on a coding question
+  if (codeEditorInstance) {
+    state.answers[state.current] = codeEditorInstance.getValue();
+  }
+  disposeCodeEditor();
   clearInterval(state.timerInterval);
-  // Stop recording first (don't close stream yet, need final chunks)
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
     mediaRecorder.onstop = () => { finalizeSubmission(); };
@@ -921,18 +1025,51 @@ function calculateAndSend(videoUrl){
   const scenarios=state.questions.map((q,i)=>({q,idx:i})).filter(x=>x.q.type==='scenario');
   const projIdx=state.questions.findIndex(q=>q.type==='project');
 
+  // Hybrid coding grading: keyword-match based auto-score (admin reviews/overrides in sheet)
+  const codingScores = [];
+  state.questions.forEach((q,i) => {
+    if (q.type === 'coding') {
+      const answer = state.answers[i] || '';
+      const answerLower = answer.toLowerCase();
+      const keywords = q.keywords || [];
+      let matched = 0;
+      const matchedList = [];
+      keywords.forEach(k => {
+        if (k && answerLower.indexOf(k.toLowerCase()) !== -1) {
+          matched++;
+          matchedList.push(k);
+        }
+      });
+      const total = keywords.length || 1;
+      const suggestedScore = keywords.length > 0 ? Math.round((matched / total) * 10) : 0;
+      codingScores.push({
+        idx: i,
+        question: q.q.substring(0, 100),
+        language: q.language,
+        answer: answer,
+        keywords: keywords,
+        matched: matched,
+        totalKeywords: keywords.length,
+        matchedKeywords: matchedList,
+        suggestedScore: suggestedScore
+      });
+    }
+  });
+
   const payload={
     name:state.candidateName,
     email:state.candidateEmail,
     set:state.set,
     score:correct,
     percentage:pct,
+    passThreshold: state.passThreshold || 60,
     correct,wrong,skipped,
     violations:state.violations,
     timeTaken:getTimeTaken(),
     scenario1:scenarios[0]?state.answers[scenarios[0].idx]||'':'',
     scenario2:scenarios[1]?state.answers[scenarios[1].idx]||'':'',
     project:state.answers[projIdx]||'',
+    codingScores: codingScores,
     aiViolations: state.aiViolations,
     pasteAttempts: state.pasteAttempts,
     deviceFingerprint: deviceFingerprint,

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — Exam Platform</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231a73ff'/%3E%3Ctext x='50' y='74' font-family='Helvetica,Arial,sans-serif' font-size='72' font-weight='800' fill='white' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --accent: #1a73ff;
+    --accent2: #4d93ff;
+    --text: #f0f4ff;
+    --text2: #8b9ab5;
+    --text3: #4a5568;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Login gate */
+  #loginGate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+  .login-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 20px; padding: 3rem; width: 100%; max-width: 420px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 2rem; }
+  .brand-icon { width: 44px; height: 44px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 20px; }
+  .brand-text { font-size: 18px; font-weight: 600; }
+  .brand-sub { font-size: 13px; color: var(--text2); }
+  .login-title { font-size: 22px; font-weight: 600; margin-bottom: 1.5rem; }
+  .form-group { margin-bottom: 1rem; }
+  .form-label { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 6px; display: block; text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-input { width: 100%; padding: 12px 16px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none; transition: border-color 0.2s; }
+  .form-input:focus { border-color: var(--accent); }
+  .btn { padding: 12px 20px; border: none; border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .btn-primary { background: var(--accent); color: white; width: 100%; }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+  .error-msg { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 1rem; text-align: center; display: none; }
+
+  /* Dashboard */
+  #dashboard { display: none; min-height: 100vh; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-title { font-size: 16px; font-weight: 600; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+  /* Stats cards */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; }
+  .stat-label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .stat-value { font-size: 28px; font-weight: 600; font-family: 'DM Mono', monospace; }
+  .stat-value.green { color: var(--success); }
+  .stat-value.red { color: var(--danger); }
+  .stat-value.yellow { color: var(--warning); }
+  .stat-value.blue { color: var(--accent2); }
+
+  /* Filters */
+  .filters { display: flex; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .filters input, .filters select { background: var(--surface2); border: 1px solid var(--border2); color: var(--text); padding: 8px 12px; border-radius: var(--radius-sm); font-family: inherit; font-size: 14px; outline: none; }
+  .filters input[type="search"] { flex: 1; min-width: 200px; }
+  .filter-label { font-size: 12px; color: var(--text2); margin-right: 4px; }
+
+  /* Table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface2); padding: 12px 14px; text-align: left; font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; border-bottom: 1px solid var(--border); }
+  td { padding: 14px; font-size: 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: rgba(255,255,255,0.02); cursor: pointer; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'DM Mono', monospace; }
+  .pill.pass { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+  .pill.fail { background: rgba(239,68,68,0.15); color: #fca5a5; }
+  .pill.viol { background: rgba(245,158,11,0.15); color: #fcd34d; }
+
+  /* Detail modal */
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: flex-start; justify-content: center; padding: 3rem 2rem; overflow-y: auto; }
+  .modal-backdrop.show { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 16px; max-width: 900px; width: 100%; padding: 2rem; }
+  .modal-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 22px; font-weight: 600; }
+  .modal-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .modal-close { background: transparent; border: none; color: var(--text2); font-size: 24px; cursor: pointer; padding: 4px 10px; }
+  .modal-close:hover { color: var(--text); }
+  .detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .detail-item { background: var(--surface2); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .detail-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .detail-value { font-size: 15px; font-weight: 500; font-family: 'DM Mono', monospace; }
+  .section { margin-bottom: 1.5rem; }
+  .section-title { font-size: 13px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-weight: 600; }
+  .answer-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; font-family: 'DM Mono', monospace; color: var(--text); }
+  .cert-btn-row { display: flex; gap: 10px; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+  .empty-state { text-align: center; padding: 4rem 2rem; color: var(--text2); }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 768px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .detail-grid { grid-template-columns: repeat(2, 1fr); }
+    table { font-size: 12px; }
+    th, td { padding: 8px 6px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN GATE -->
+<div id="loginGate">
+  <div class="login-card">
+    <div class="brand" style="flex-direction:column;align-items:flex-start;gap:0;">
+      <div style="background:white;padding:10px 14px;border-radius:10px;margin-bottom:12px;">
+        <img src="https://i.postimg.cc/zfzwSwwq/Screenshot-2026-04-22-120938.png" alt="Fingertip" style="height:40px;width:auto;display:block;" />
+      </div>
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Admin Dashboard</div>
+    </div>
+    <div class="login-title">Enter Admin Password</div>
+    <form onsubmit="event.preventDefault(); login();">
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="pwInput" class="form-input" placeholder="Admin password" autofocus />
+      </div>
+      <button type="submit" class="btn btn-primary">Sign In</button>
+    </form>
+    <div id="loginError" class="error-msg"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div style="background:white;padding:6px 10px;border-radius:6px;">
+        <img src="https://i.postimg.cc/zfzwSwwq/Screenshot-2026-04-22-120938.png" alt="Fingertip" style="height:26px;width:auto;display:block;" />
+      </div>
+      <div style="width:1px;height:32px;background:var(--border2);"></div>
+      <div class="topbar-title">Admin Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost btn-sm" onclick="loadResults()">🔄 Refresh</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total Submissions</div>
+        <div class="stat-value blue" id="statTotal">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Passed</div>
+        <div class="stat-value green" id="statPassed">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Failed</div>
+        <div class="stat-value red" id="statFailed">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">With Violations</div>
+        <div class="stat-value yellow" id="statViol">0</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <input type="search" id="searchInput" placeholder="🔍 Search name or email..." oninput="render()">
+      <span class="filter-label">Result:</span>
+      <select id="resultFilter" onchange="render()">
+        <option value="">All</option>
+        <option value="PASSED">Passed</option>
+        <option value="FAILED">Failed</option>
+      </select>
+      <span class="filter-label">Set:</span>
+      <select id="setFilter" onchange="render()">
+        <option value="">All</option>
+      </select>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <div id="loadingState" style="padding:3rem;text-align:center;">
+        <div class="spinner"></div>
+        <div style="color:var(--text2);">Loading submissions...</div>
+      </div>
+      <table id="resultsTable" style="display:none;">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Set</th>
+            <th>Score</th>
+            <th>%</th>
+            <th>Result</th>
+            <th>Viol.</th>
+            <th>Time</th>
+            <th>Video</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div id="emptyState" class="empty-state" style="display:none;">
+        <div style="font-size:48px;margin-bottom:1rem;">📭</div>
+        <div style="font-size:16px;margin-bottom:6px;">No submissions yet</div>
+        <div style="font-size:13px;">Results will appear here once candidates complete the exam.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">Candidate Details</div>
+        <div class="modal-sub" id="modalSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (same URL as exam)
+// ================================================================
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbzuz9ywWxA_pTvbTeAc-kPbdNEBlt_Jl6FlztmtF6RN8wpr-rGYsFA-8i-DGvIWUsov/exec";
+// ================================================================
+
+let adminPassword = "";
+let allRows = [];
+
+// ===== Authentication =====
+function login() {
+  const pw = document.getElementById('pwInput').value;
+  if (!pw) { showLoginError('Enter a password'); return; }
+  adminPassword = pw;
+  // Remember on this device
+  try { sessionStorage.setItem('adminPw', pw); } catch(e) {}
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  loadResults();
+}
+
+function logout() {
+  try { sessionStorage.removeItem('adminPw'); } catch(e) {}
+  adminPassword = "";
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loginGate').style.display = 'flex';
+  document.getElementById('pwInput').value = '';
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ===== JSONP helper =====
+function jsonpRequest(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'jsonp_cb_' + Date.now() + Math.random().toString(36).slice(2);
+    window[cbName] = function(data) {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    const script = document.createElement('script');
+    script.src = url + (url.indexOf('?')>-1?'&':'?') + 'callback=' + cbName;
+    script.onerror = () => { delete window[cbName]; reject(new Error('Network error')); };
+    document.body.appendChild(script);
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      if (window[cbName]) { delete window[cbName]; reject(new Error('Request timeout')); }
+    }, 30000);
+  });
+}
+
+// ===== Load results =====
+async function loadResults() {
+  document.getElementById('loadingState').style.display = 'block';
+  document.getElementById('resultsTable').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+
+  try {
+    const url = SHEETS_URL + '?action=getResults&password=' + encodeURIComponent(adminPassword);
+    const res = await jsonpRequest(url);
+    if (res.error) {
+      if (res.error.indexOf('password') !== -1) {
+        showLoginError('Invalid admin password');
+        logout();
+        return;
+      }
+      throw new Error(res.error);
+    }
+    allRows = res.rows || [];
+    populateSetFilter();
+    render();
+  } catch (err) {
+    document.getElementById('loadingState').innerHTML =
+      '<div style="color:#fca5a5;">Failed to load: ' + err.message + '<br><button class="btn btn-ghost btn-sm" style="margin-top:12px;" onclick="loadResults()">Retry</button></div>';
+  }
+}
+
+function populateSetFilter() {
+  const sets = [...new Set(allRows.map(r => r.Set || r.set).filter(Boolean))];
+  const select = document.getElementById('setFilter');
+  const current = select.value;
+  select.innerHTML = '<option value="">All</option>' + sets.map(s => `<option value="${s}">Set ${s}</option>`).join('');
+  select.value = current;
+}
+
+// ===== Render table + stats =====
+function render() {
+  const search = document.getElementById('searchInput').value.toLowerCase().trim();
+  const resultFilter = document.getElementById('resultFilter').value;
+  const setFilter = document.getElementById('setFilter').value;
+
+  const filtered = allRows.filter(r => {
+    const name = String(r.Name || r.name || '').toLowerCase();
+    const email = String(r.Email || r.email || '').toLowerCase();
+    if (search && !name.includes(search) && !email.includes(search)) return false;
+    if (resultFilter && String(r.Result || '').toUpperCase() !== resultFilter) return false;
+    if (setFilter && String(r.Set || r.set || '').toUpperCase() !== setFilter) return false;
+    return true;
+  });
+
+  // Stats (always on full dataset, not filtered)
+  const passed = allRows.filter(r => String(r.Result || '').toUpperCase() === 'PASSED').length;
+  const failed = allRows.filter(r => String(r.Result || '').toUpperCase() === 'FAILED').length;
+  const withViol = allRows.filter(r => (parseInt(r.Violations) || 0) > 0 || (String(r['AI Violations'] || '[]').length > 5)).length;
+  document.getElementById('statTotal').textContent = allRows.length;
+  document.getElementById('statPassed').textContent = passed;
+  document.getElementById('statFailed').textContent = failed;
+  document.getElementById('statViol').textContent = withViol;
+
+  document.getElementById('loadingState').style.display = 'none';
+
+  if (filtered.length === 0) {
+    document.getElementById('resultsTable').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('resultsTable').style.display = 'table';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = filtered.map((r, idx) => {
+    const result = String(r.Result || '').toUpperCase();
+    const violations = parseInt(r.Violations) || 0;
+    const videoUrl = r['Video URL'] || '';
+    return `<tr onclick="showDetail(${allRows.indexOf(r)})">
+      <td>${escapeHtml(r.Timestamp || '')}</td>
+      <td>${escapeHtml(r.Name || '')}</td>
+      <td>${escapeHtml(r.Email || '')}</td>
+      <td><span class="pill" style="background:rgba(59,127,255,0.15);color:#60a5fa;">Set ${escapeHtml(r.Set || '-')}</span></td>
+      <td>${escapeHtml(String(r.Score || 0))}/${escapeHtml(String(r['Total MCQ'] || 0))}</td>
+      <td style="font-family:'DM Mono',monospace;">${escapeHtml(r.Percentage || '0%')}</td>
+      <td><span class="pill ${result==='PASSED'?'pass':'fail'}">${result||'-'}</span></td>
+      <td>${violations>0?`<span class="pill viol">${violations}</span>`:'-'}</td>
+      <td style="font-family:'DM Mono',monospace;">${escapeHtml(r['Time Taken'] || '-')}</td>
+      <td>${videoUrl?`<a href="${escapeHtml(videoUrl)}" target="_blank" onclick="event.stopPropagation()" style="color:var(--accent2);text-decoration:none;">▶ Watch</a>`:'-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== Detail modal =====
+function showDetail(idx) {
+  const r = allRows[idx];
+  if (!r) return;
+  document.getElementById('modalTitle').textContent = r.Name || 'Unknown';
+  document.getElementById('modalSub').textContent = `${r.Email || ''} · Set ${r.Set || '-'} · Submitted ${r.Timestamp || ''}`;
+
+  const videoUrl = r['Video URL'] || '';
+  const aiViolations = parseJson(r['AI Violations']) || [];
+  const codingAnswers = parseJson(r['Coding Answers (JSON)']) || [];
+  const qTimes = parseJson(r['Question Times']) || [];
+
+  let html = `<div class="detail-grid">
+    <div class="detail-item"><div class="detail-label">Score</div><div class="detail-value">${r.Score || 0} / ${r['Total MCQ'] || 0}</div></div>
+    <div class="detail-item"><div class="detail-label">Percentage</div><div class="detail-value">${r.Percentage || '0%'}</div></div>
+    <div class="detail-item"><div class="detail-label">Result</div><div class="detail-value" style="color:${String(r.Result).toUpperCase()==='PASSED'?'var(--success)':'var(--danger)'}">${r.Result || '-'}</div></div>
+    <div class="detail-item"><div class="detail-label">Time Taken</div><div class="detail-value">${r['Time Taken'] || '-'}</div></div>
+    <div class="detail-item"><div class="detail-label">Correct</div><div class="detail-value" style="color:var(--success)">${r.Correct || 0}</div></div>
+    <div class="detail-item"><div class="detail-label">Wrong</div><div class="detail-value" style="color:var(--danger)">${r.Wrong || 0}</div></div>
+    <div class="detail-item"><div class="detail-label">Skipped</div><div class="detail-value" style="color:var(--warning)">${r.Skipped || 0}</div></div>
+    <div class="detail-item"><div class="detail-label">Violations</div><div class="detail-value" style="color:${(parseInt(r.Violations)||0)>0?'var(--danger)':'var(--text2)'}">${r.Violations || 0}</div></div>
+  </div>`;
+
+  // Video
+  if (videoUrl) {
+    html += `<div class="section">
+      <div class="section-title">Exam Recording</div>
+      <a href="${escapeHtml(videoUrl)}" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;">▶ Open Video in Drive</a>
+    </div>`;
+  }
+
+  // AI violations
+  if (aiViolations.length) {
+    html += `<div class="section">
+      <div class="section-title">AI-Detected Events (${aiViolations.length})</div>
+      <div class="answer-box">${aiViolations.map(v => `[${v.time||'?'}] ${v.type}: ${escapeHtml(v.detail || '')}`).join('\n')}</div>
+    </div>`;
+  }
+
+  // Coding
+  if (codingAnswers.length) {
+    html += `<div class="section">
+      <div class="section-title">Coding Answers (${codingAnswers.length})</div>`;
+    codingAnswers.forEach((c, i) => {
+      html += `<div style="margin-bottom:1rem;">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px;"><strong>Q${i+1}:</strong> ${escapeHtml(c.question || '')} <span style="color:var(--accent2);font-family:'DM Mono',monospace;">[${c.language}]</span></div>
+        <div class="answer-box">${escapeHtml(c.answer || '(empty)')}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">Keywords matched: ${c.matched}/${c.totalKeywords} · Suggested score: <strong>${c.suggestedScore}/10</strong></div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Scenarios & Project
+  if (r['Scenario 1']) html += `<div class="section"><div class="section-title">Scenario 1</div><div class="answer-box">${escapeHtml(r['Scenario 1'])}</div></div>`;
+  if (r['Scenario 2']) html += `<div class="section"><div class="section-title">Scenario 2</div><div class="answer-box">${escapeHtml(r['Scenario 2'])}</div></div>`;
+  if (r.Project) html += `<div class="section"><div class="section-title">Project</div><div class="answer-box">${escapeHtml(r.Project)}</div></div>`;
+
+  // Certificate button (only if PASSED)
+  if (String(r.Result).toUpperCase() === 'PASSED') {
+    const existingCert = r['Certificate URL'];
+    html += `<div class="cert-btn-row">
+      ${existingCert ? `<a href="${escapeHtml(existingCert)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">📄 View Certificate</a>` : ''}
+      <button class="btn btn-success btn-sm" onclick="issueCertificate(${r._rowNumber})" id="certBtn_${r._rowNumber}">🎓 ${existingCert ? 'Resend' : 'Issue'} Certificate</button>
+    </div>`;
+  }
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('modalBackdrop').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modalBackdrop').classList.remove('show');
+}
+
+async function issueCertificate(rowNumber) {
+  const btn = document.getElementById('certBtn_' + rowNumber);
+  if (!btn) return;
+  if (!confirm('Generate and email the certificate to the candidate?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  try {
+    const url = SHEETS_URL + '?action=generateCertificate&password=' + encodeURIComponent(adminPassword) + '&row=' + rowNumber;
+    const res = await jsonpRequest(url);
+    if (res.success) {
+      btn.textContent = '✓ Sent!';
+      btn.style.background = 'var(--success)';
+      setTimeout(() => { closeModal(); loadResults(); }, 1500);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '🎓 Issue Certificate';
+      alert('Failed: ' + (res.error || 'Unknown error'));
+    }
+  } catch(err) {
+    btn.disabled = false;
+    btn.textContent = '🎓 Issue Certificate';
+    alert('Error: ' + err.message);
+  }
+}
+
+// ===== Utils =====
+function escapeHtml(str) {
+  return String(str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function parseJson(str) {
+  if (!str) return null;
+  try { return JSON.parse(str); } catch(e) { return null; }
+}
+
+// ===== On load: check for saved session =====
+document.addEventListener('DOMContentLoaded', function() {
+  const saved = sessionStorage.getItem('adminPw');
+  if (saved) {
+    document.getElementById('pwInput').value = saved;
+    login();
+  }
+});
+</script>
+</body>
+</html>

@@ -385,19 +385,52 @@ function showAuthError(msg) {
   setTimeout(()=>{ el.style.display = 'none'; }, 6000);
 }
 
-function jsonpRequest(url, callbackName) {
+function jsonpRequest(url, timeoutMs) {
+  timeoutMs = timeoutMs || 15000; // default 15s
   return new Promise((resolve, reject) => {
-    const cbName = callbackName || ('jsonp_cb_' + Date.now() + Math.random().toString(36).slice(2));
-    window[cbName] = function(data) {
+    const cbName = 'jsonp_cb_' + Date.now() + Math.random().toString(36).slice(2);
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
       delete window[cbName];
       if (script.parentNode) script.parentNode.removeChild(script);
-      resolve(data);
+      clearTimeout(timer);
     };
+    window[cbName] = function(data) { cleanup(); resolve(data); };
     const script = document.createElement('script');
     script.src = url + (url.indexOf('?')>-1?'&':'?') + 'callback=' + cbName;
-    script.onerror = () => { delete window[cbName]; reject(new Error('Network error')); };
+    script.onerror = () => { cleanup(); reject(new Error('Network error')); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, timeoutMs);
     document.body.appendChild(script);
   });
+}
+
+// Retry wrapper — tries up to `attempts` times with short delay on timeout/network errors
+async function jsonpRetry(url, attempts, onRetry) {
+  attempts = attempts || 3;
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await jsonpRequest(url, 15000);
+    } catch(err) {
+      lastErr = err;
+      if (i < attempts - 1 && onRetry) onRetry(i + 1);
+      await new Promise(r => setTimeout(r, 800)); // brief pause between retries
+    }
+  }
+  throw lastErr;
+}
+
+// Fire-and-forget warm-up — wakes the Apps Script server in the background
+function warmUpServer() {
+  try {
+    const script = document.createElement('script');
+    script.src = SHEETS_URL + '?action=ping&callback=noop_' + Date.now();
+    window['noop_' + Date.now()] = function(){};
+    script.onerror = () => {};
+    document.body.appendChild(script);
+  } catch(e) { /* ignore */ }
 }
 
 async function sendOtp() {
@@ -410,7 +443,9 @@ async function sendOtp() {
   btn.disabled = true; btn.textContent = 'Sending...';
   try {
     const url = SHEETS_URL + '?action=sendOtp&email=' + encodeURIComponent(email) + '&fingerprint=' + encodeURIComponent(deviceFingerprint);
-    const res = await jsonpRequest(url);
+    const res = await jsonpRetry(url, 3, (attempt) => {
+      btn.textContent = 'Waking server... (try ' + (attempt + 1) + ')';
+    });
     if (res.success) {
       document.getElementById('otpEmailDisplay').textContent = email;
       document.getElementById('step1Email').style.display = 'none';
@@ -421,7 +456,7 @@ async function sendOtp() {
       btn.disabled = false; btn.textContent = 'Send Verification Code';
     }
   } catch(err) {
-    showAuthError('Network error. Please check your internet.');
+    showAuthError('Server is taking too long. Please try again in a moment.');
     btn.disabled = false; btn.textContent = 'Send Verification Code';
   }
 }
@@ -432,7 +467,7 @@ async function verifyOtp() {
   if (!otp || otp.length !== 6) { showAuthError('Enter the 6-digit code.'); return; }
   try {
     const url = SHEETS_URL + '?action=verifyOtp&email=' + encodeURIComponent(email) + '&otp=' + encodeURIComponent(otp);
-    const res = await jsonpRequest(url);
+    const res = await jsonpRetry(url, 3);
     if (res.success) {
       verifiedEmail = email;
       document.getElementById('verifiedEmailDisplay').textContent = email;
@@ -443,7 +478,7 @@ async function verifyOtp() {
       showAuthError(res.error || 'Invalid OTP.');
     }
   } catch(err) {
-    showAuthError('Network error. Try again.');
+    showAuthError('Server is taking too long. Please try again.');
   }
 }
 
@@ -573,14 +608,15 @@ function startExam() {
   setupProctoring();
 }
 
-// On page load: init fingerprint + check for interrupted exam
+// On page load: warm up Apps Script, init fingerprint, check for interrupted exam
 document.addEventListener('DOMContentLoaded', function(){
+  warmUpServer(); // Fire-and-forget to wake cold Apps Script in background
   initFingerprint();
   // Allow Enter key to submit OTP form
   const otpInput = document.getElementById('otpInput');
   if (otpInput) otpInput.addEventListener('keydown', function(e){ if(e.key==='Enter') verifyOtp(); });
   // Check if there's an in-progress exam saved from a previous session
-  setTimeout(checkResumeOnLoad, 500); // small delay so page is fully rendered before prompt
+  setTimeout(checkResumeOnLoad, 500);
 });
 
 function showScreen(id){
@@ -841,25 +877,37 @@ function stopCamera() {
   document.getElementById('cameraBox').style.display = 'none';
 }
 
-// Upload video to Drive via Apps Script (returns URL)
-async function uploadVideoToDrive() {
-  if (!videoChunks.length) return '';
-  try {
-    const blob = new Blob(videoChunks, { type: 'video/webm' });
-    // Only upload if under 25MB to avoid Apps Script limit
-    if (blob.size > 25 * 1024 * 1024) {
-      console.warn('Video too large, skipping upload');
-      return '';
-    }
-    const base64 = await blobToBase64(blob);
-    const res = await fetch(SHEETS_URL, {
-      method: 'POST',
-      mode: 'cors',
-      body: JSON.stringify({ type:'video', email:state.candidateEmail, name:state.candidateName, video:base64 })
-    });
-    const data = await res.json();
-    return data.videoUrl || '';
-  } catch(err) { console.warn('Video upload failed:', err); return ''; }
+// Upload video to Drive via Apps Script — uses XHR for progress events
+function uploadVideoToDrive(onProgress) {
+  return new Promise((resolve) => {
+    if (!videoChunks.length) { resolve(''); return; }
+    try {
+      const blob = new Blob(videoChunks, { type: 'video/webm' });
+      if (blob.size > 25 * 1024 * 1024) {
+        console.warn('Video too large, skipping upload');
+        resolve('');
+        return;
+      }
+      blobToBase64(blob).then(base64 => {
+        const payload = JSON.stringify({ type:'video', email:state.candidateEmail, name:state.candidateName, video:base64 });
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', SHEETS_URL);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable && onProgress) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            resolve(data.videoUrl || '');
+          } catch(e) { resolve(''); }
+        };
+        xhr.onerror = () => { console.warn('Video upload failed'); resolve(''); };
+        xhr.send(payload);
+      }).catch(() => resolve(''));
+    } catch(err) { console.warn('Video upload failed:', err); resolve(''); }
+  });
 }
 
 function blobToBase64(blob) {
@@ -1089,9 +1137,35 @@ function submitExam(reason){
 
 async function finalizeSubmission() {
   document.getElementById('submittingOverlay').classList.add('show');
-  const videoUrl = await uploadVideoToDrive();
+  // Enrich submitting overlay with progress feedback
+  updateSubmitProgress('Uploading exam recording...', 0);
+  const videoUrl = await uploadVideoToDrive((pct) => {
+    updateSubmitProgress('Uploading exam recording... ' + pct + '%', pct);
+  });
+  updateSubmitProgress('Saving your answers...', 100);
   stopCamera();
   calculateAndSend(videoUrl);
+}
+
+// Update the submitting overlay with progress text + bar
+function updateSubmitProgress(msg, pct) {
+  const overlay = document.getElementById('submittingOverlay');
+  if (!overlay) return;
+  const card = overlay.querySelector('.overlay-card');
+  if (!card) return;
+  // Inject progress bar on first call
+  if (!document.getElementById('submitProgressBar')) {
+    const progressHtml =
+      '<div id="submitProgressMsg" style="font-size:13px;color:var(--text2);margin-top:8px;"></div>' +
+      '<div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:10px;overflow:hidden;">' +
+      '<div id="submitProgressBar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;"></div>' +
+      '</div>';
+    card.insertAdjacentHTML('beforeend', progressHtml);
+  }
+  const msgEl = document.getElementById('submitProgressMsg');
+  const barEl = document.getElementById('submitProgressBar');
+  if (msgEl) msgEl.textContent = msg;
+  if (barEl) barEl.style.width = (pct || 0) + '%';
 }
 
 function finalizeAndShow(){

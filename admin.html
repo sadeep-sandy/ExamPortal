@@ -272,24 +272,52 @@ function showLoginError(msg) {
   setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 
-// ===== JSONP helper =====
-function jsonpRequest(url) {
+// ===== JSONP helper with timeout =====
+function jsonpRequest(url, timeoutMs) {
+  timeoutMs = timeoutMs || 15000;
   return new Promise((resolve, reject) => {
     const cbName = 'jsonp_cb_' + Date.now() + Math.random().toString(36).slice(2);
-    window[cbName] = function(data) {
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
       delete window[cbName];
       if (script.parentNode) script.parentNode.removeChild(script);
-      resolve(data);
+      clearTimeout(timer);
     };
+    window[cbName] = function(data) { cleanup(); resolve(data); };
     const script = document.createElement('script');
     script.src = url + (url.indexOf('?')>-1?'&':'?') + 'callback=' + cbName;
-    script.onerror = () => { delete window[cbName]; reject(new Error('Network error')); };
+    script.onerror = () => { cleanup(); reject(new Error('Network error')); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, timeoutMs);
     document.body.appendChild(script);
-    // Timeout after 30 seconds
-    setTimeout(() => {
-      if (window[cbName]) { delete window[cbName]; reject(new Error('Request timeout')); }
-    }, 30000);
   });
+}
+
+// Retry wrapper — tries up to `attempts` times
+async function jsonpRetry(url, attempts) {
+  attempts = attempts || 3;
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await jsonpRequest(url, 15000); }
+    catch(err) {
+      lastErr = err;
+      await new Promise(r => setTimeout(r, 800));
+    }
+  }
+  throw lastErr;
+}
+
+// Fire-and-forget warm-up
+function warmUpServer() {
+  try {
+    const cbName = 'noop_' + Date.now();
+    window[cbName] = function(){};
+    const script = document.createElement('script');
+    script.src = SHEETS_URL + '?action=ping&callback=' + cbName;
+    script.onerror = () => {};
+    document.body.appendChild(script);
+  } catch(e) { /* ignore */ }
 }
 
 // ===== Load results =====
@@ -300,7 +328,7 @@ async function loadResults() {
 
   try {
     const url = SHEETS_URL + '?action=getResults&password=' + encodeURIComponent(adminPassword);
-    const res = await jsonpRequest(url);
+    const res = await jsonpRetry(url, 3);
     if (res.error) {
       if (res.error.indexOf('password') !== -1) {
         showLoginError('Invalid admin password');
@@ -404,11 +432,19 @@ function showDetail(idx) {
     <div class="detail-item"><div class="detail-label">Violations</div><div class="detail-value" style="color:${(parseInt(r.Violations)||0)>0?'var(--danger)':'var(--text2)'}">${r.Violations || 0}</div></div>
   </div>`;
 
-  // Video
+  // Video — embed Drive preview iframe directly in the modal
   if (videoUrl) {
+    const fileId = extractDriveFileId(videoUrl);
+    const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : null;
     html += `<div class="section">
-      <div class="section-title">Exam Recording</div>
-      <a href="${escapeHtml(videoUrl)}" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;">▶ Open Video in Drive</a>
+      <div class="section-title">Exam Recording</div>`;
+    if (embedUrl) {
+      html += `<div style="position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:var(--radius);overflow:hidden;margin-bottom:10px;">
+        <iframe src="${embedUrl}" allow="autoplay" allowfullscreen
+          style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"></iframe>
+      </div>`;
+    }
+    html += `<a href="${escapeHtml(videoUrl)}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-block;text-decoration:none;margin-top:6px;">⤴ Open in Drive (new tab)</a>
     </div>`;
   }
 
@@ -524,13 +560,24 @@ async function resetCandidate(rowNumber) {
 function escapeHtml(str) {
   return String(str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// Extract Drive file ID from any Drive URL format
+function extractDriveFileId(url) {
+  if (!url) return null;
+  // Formats: /file/d/FILE_ID/view, /open?id=FILE_ID, /uc?id=FILE_ID, /d/FILE_ID/
+  const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1) return m1[1];
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2) return m2[1];
+  return null;
+}
 function parseJson(str) {
   if (!str) return null;
   try { return JSON.parse(str); } catch(e) { return null; }
 }
 
-// ===== On load: check for saved session =====
+// ===== On load: warm server + check for saved session =====
 document.addEventListener('DOMContentLoaded', function() {
+  warmUpServer(); // wake Apps Script in background
   const saved = sessionStorage.getItem('adminPw');
   if (saved) {
     document.getElementById('pwInput').value = saved;

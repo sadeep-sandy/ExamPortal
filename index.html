@@ -886,68 +886,51 @@ function stopCamera() {
   document.getElementById('cameraBox').style.display = 'none';
 }
 
-// Upload video to Drive via Apps Script — uses XHR with progress, sends as text/plain (CORS-safe)
-function uploadVideoToDrive(onProgress) {
-  return new Promise((resolve) => {
-    if (!videoChunks.length) {
-      console.warn('Video upload: no chunks');
-      resolve('');
-      return;
+// Upload video to Drive via Apps Script — uses fetch with mode:'no-cors' (CORS-safe, no preflight)
+// Backend saves the Video URL directly to the Results sheet (no need to read response)
+async function uploadVideoToDrive(onProgress) {
+  if (!videoChunks.length) {
+    console.warn('Video upload: no chunks');
+    return '';
+  }
+  try {
+    const blob = new Blob(videoChunks, { type: 'video/webm' });
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+    console.log('🎥 Video size:', sizeMB, 'MB');
+    if (blob.size > 35 * 1024 * 1024) {
+      console.error('❌ Video too large (' + sizeMB + ' MB, max 35MB). Skipping upload.');
+      alert('Warning: Exam recording is too large to save (' + sizeMB + ' MB). Results will still be submitted.');
+      return '';
     }
+    const base64 = await blobToBase64(blob);
+    const payload = JSON.stringify({ type:'video', email:state.candidateEmail, name:state.candidateName, video:base64 });
+
+    // Simulate progress bar since no-cors doesn't give real progress
+    let fakePct = 0;
+    const progressTimer = setInterval(() => {
+      fakePct = Math.min(95, fakePct + Math.random() * 8);
+      if (onProgress) onProgress(Math.round(fakePct));
+    }, 500);
+
+    console.log('🎥 Uploading video... (fire-and-forget, backend will save URL to sheet)');
     try {
-      const blob = new Blob(videoChunks, { type: 'video/webm' });
-      const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
-      console.log('🎥 Video size:', sizeMB, 'MB');
-      // Apps Script POST has ~50MB limit including base64 overhead (~33% bigger)
-      // So actual video limit is ~37MB. We cap at 35MB to be safe.
-      if (blob.size > 35 * 1024 * 1024) {
-        console.error('❌ Video too large (' + sizeMB + ' MB, max 35MB). Skipping upload — record shorter exams or lower resolution.');
-        alert('Warning: Exam recording is too large to save (' + sizeMB + ' MB). Results will still be submitted.');
-        resolve('');
-        return;
-      }
-      blobToBase64(blob).then(base64 => {
-        const payload = JSON.stringify({ type:'video', email:state.candidateEmail, name:state.candidateName, video:base64 });
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', SHEETS_URL);
-        // Send as text/plain to avoid CORS preflight (Apps Script Web Apps don't handle OPTIONS)
-        xhr.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable && onProgress) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        };
-        xhr.onload = () => {
-          console.log('Video upload response:', xhr.status, xhr.responseText?.substring(0, 200));
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (data.status === 'success') {
-              console.log('Video uploaded:', data.videoUrl);
-              resolve(data.videoUrl || '');
-            } else {
-              console.warn('Video upload error:', data.message);
-              resolve('');
-            }
-          } catch(e) {
-            console.warn('Could not parse video response:', e);
-            // URL will still be saved by Apps Script to the sheet directly
-            resolve('');
-          }
-        };
-        xhr.onerror = (e) => {
-          console.warn('Video upload network error:', e);
-          resolve('');
-        };
-        xhr.send(payload);
-      }).catch(err => {
-        console.warn('Video base64 encoding failed:', err);
-        resolve('');
+      await fetch(SHEETS_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: payload
       });
-    } catch(err) {
-      console.warn('Video upload failed:', err);
-      resolve('');
+      clearInterval(progressTimer);
+      if (onProgress) onProgress(100);
+      console.log('✅ Video upload request sent. URL will be saved to Results sheet by backend.');
+    } catch(fetchErr) {
+      clearInterval(progressTimer);
+      console.warn('Video upload fetch failed:', fetchErr);
     }
-  });
+    return ''; // URL not returned to frontend; backend writes it to sheet
+  } catch(err) {
+    console.warn('Video upload failed:', err);
+    return '';
+  }
 }
 
 function blobToBase64(blob) {

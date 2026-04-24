@@ -1160,14 +1160,91 @@ function submitExam(reason){
 
 async function finalizeSubmission() {
   document.getElementById('submittingOverlay').classList.add('show');
-  // Enrich submitting overlay with progress feedback
-  updateSubmitProgress('Uploading exam recording...', 0);
-  const videoUrl = await uploadVideoToDrive((pct) => {
-    updateSubmitProgress('Uploading exam recording... ' + pct + '%', pct);
+
+  // 1. Submit results FIRST — this creates the Results row in the sheet
+  updateSubmitProgress('Saving your answers...', 10);
+  await sendResultsToSheet('');
+
+  // 2. Wait a moment for the row to actually commit to the sheet
+  await new Promise(r => setTimeout(r, 1500));
+
+  // 3. Upload video — backend finds the row we just created (by email)
+  //    and writes the Video URL into column 22
+  updateSubmitProgress('Uploading exam recording...', 25);
+  await uploadVideoToDrive((pct) => {
+    updateSubmitProgress('Uploading exam recording... ' + pct + '%', 25 + pct * 0.7);
   });
-  updateSubmitProgress('Saving your answers...', 100);
+
+  updateSubmitProgress('Complete!', 100);
+  clearExamState();
   stopCamera();
-  calculateAndSend(videoUrl);
+  setTimeout(() => {
+    document.getElementById('submittingOverlay').classList.remove('show');
+    showSubmittedScreen();
+  }, 600);
+}
+
+// Build payload + send to Results sheet (no video URL — backend adds it after upload)
+async function sendResultsToSheet(videoUrl) {
+  const mcqs=[];
+  state.questions.forEach((q,i)=>{ if(q.type==='mcq') mcqs.push({q,idx:i}); });
+  let correct=0,wrong=0,skipped=0;
+  mcqs.forEach(({q,idx})=>{
+    const ans=state.answers[idx];
+    if(ans===undefined)skipped++;
+    else if(ans===q.correct)correct++;
+    else wrong++;
+  });
+  const totalMCQ=mcqs.length||1;
+  const pct=Math.round((correct/totalMCQ)*100);
+  const scenarios=state.questions.map((q,i)=>({q,idx:i})).filter(x=>x.q.type==='scenario');
+  const projIdx=state.questions.findIndex(q=>q.type==='project');
+
+  const codingScores = [];
+  state.questions.forEach((q,i) => {
+    if (q.type === 'coding') {
+      const answer = state.answers[i] || '';
+      const answerLower = answer.toLowerCase();
+      const keywords = q.keywords || [];
+      let matched = 0;
+      const matchedList = [];
+      keywords.forEach(k => {
+        if (k && answerLower.indexOf(k.toLowerCase()) !== -1) { matched++; matchedList.push(k); }
+      });
+      const total = keywords.length || 1;
+      const suggestedScore = keywords.length > 0 ? Math.round((matched / total) * 10) : 0;
+      codingScores.push({
+        idx: i, question: q.q.substring(0, 100), language: q.language,
+        answer: answer, keywords: keywords, matched: matched,
+        totalKeywords: keywords.length, matchedKeywords: matchedList,
+        suggestedScore: suggestedScore
+      });
+    }
+  });
+
+  const payload={
+    name:state.candidateName, email:state.candidateEmail, set:state.set,
+    score:correct, percentage:pct, passThreshold: state.passThreshold || 60,
+    correct, wrong, skipped,
+    violations:state.violations, timeTaken:getTimeTaken(),
+    scenario1:scenarios[0]?state.answers[scenarios[0].idx]||'':'',
+    scenario2:scenarios[1]?state.answers[scenarios[1].idx]||'':'',
+    project:state.answers[projIdx]||'',
+    codingScores, aiViolations: state.aiViolations,
+    pasteAttempts: state.pasteAttempts,
+    deviceFingerprint: deviceFingerprint,
+    videoUrl: videoUrl || '',
+    questionTimes: state.questionTimes
+  };
+
+  try {
+    await fetch(SHEETS_URL, {
+      method:'POST',
+      mode:'no-cors',
+      body: JSON.stringify(payload)
+    });
+    console.log('✅ Results submitted');
+  } catch(err) { console.warn('Results submit failed:', err); }
 }
 
 // Update the submitting overlay with progress text + bar
@@ -1211,88 +1288,9 @@ function getTimeTaken(){
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
+// Legacy wrapper (in case anything still calls it)
 function calculateAndSend(videoUrl){
-  const mcqs=[];
-  state.questions.forEach((q,i)=>{ if(q.type==='mcq') mcqs.push({q,idx:i}); });
-  let correct=0,wrong=0,skipped=0;
-  mcqs.forEach(({q,idx})=>{
-    const ans=state.answers[idx];
-    if(ans===undefined)skipped++;
-    else if(ans===q.correct)correct++;
-    else wrong++;
-  });
-  const totalMCQ=mcqs.length||1;
-  const pct=Math.round((correct/totalMCQ)*100);
-  const scenarios=state.questions.map((q,i)=>({q,idx:i})).filter(x=>x.q.type==='scenario');
-  const projIdx=state.questions.findIndex(q=>q.type==='project');
-
-  // Hybrid coding grading: keyword-match based auto-score (admin reviews/overrides in sheet)
-  const codingScores = [];
-  state.questions.forEach((q,i) => {
-    if (q.type === 'coding') {
-      const answer = state.answers[i] || '';
-      const answerLower = answer.toLowerCase();
-      const keywords = q.keywords || [];
-      let matched = 0;
-      const matchedList = [];
-      keywords.forEach(k => {
-        if (k && answerLower.indexOf(k.toLowerCase()) !== -1) {
-          matched++;
-          matchedList.push(k);
-        }
-      });
-      const total = keywords.length || 1;
-      const suggestedScore = keywords.length > 0 ? Math.round((matched / total) * 10) : 0;
-      codingScores.push({
-        idx: i,
-        question: q.q.substring(0, 100),
-        language: q.language,
-        answer: answer,
-        keywords: keywords,
-        matched: matched,
-        totalKeywords: keywords.length,
-        matchedKeywords: matchedList,
-        suggestedScore: suggestedScore
-      });
-    }
-  });
-
-  const payload={
-    name:state.candidateName,
-    email:state.candidateEmail,
-    set:state.set,
-    score:correct,
-    percentage:pct,
-    passThreshold: state.passThreshold || 60,
-    correct,wrong,skipped,
-    violations:state.violations,
-    timeTaken:getTimeTaken(),
-    scenario1:scenarios[0]?state.answers[scenarios[0].idx]||'':'',
-    scenario2:scenarios[1]?state.answers[scenarios[1].idx]||'':'',
-    project:state.answers[projIdx]||'',
-    codingScores: codingScores,
-    aiViolations: state.aiViolations,
-    pasteAttempts: state.pasteAttempts,
-    deviceFingerprint: deviceFingerprint,
-    videoUrl: videoUrl || '',
-    questionTimes: state.questionTimes
-  };
-
-  sendToSheets(payload);
-}
-
-async function sendToSheets(payload){
-  try {
-    await fetch(SHEETS_URL, {
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload)
-    });
-  } catch(err) { /* ignore */ }
-  clearExamState(); // clear localStorage — exam no longer resumable
-  document.getElementById('submittingOverlay').classList.remove('show');
-  showSubmittedScreen();
+  return sendResultsToSheet(videoUrl);
 }
 
 function showSubmittedScreen(){

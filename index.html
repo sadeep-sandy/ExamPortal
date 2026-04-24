@@ -862,13 +862,18 @@ function startAudioMonitoring() {
 // ---- Video recording ----
 function startVideoRecording() {
   try {
-    const options = { mimeType: 'video/webm;codecs=vp9' };
+    // Lower bitrate for smaller file size (300 kbps video, enough for face check)
+    const options = {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 300000
+    };
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
       options.mimeType = 'video/webm';
     }
     mediaRecorder = new MediaRecorder(camStream, options);
     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data); };
-    mediaRecorder.start(5000); // collect data every 5 seconds
+    mediaRecorder.start(5000);
+    console.log('🎥 Video recording started at 300kbps');
   } catch(err) { console.warn('Video recording failed:', err); }
 }
 
@@ -891,9 +896,13 @@ function uploadVideoToDrive(onProgress) {
     }
     try {
       const blob = new Blob(videoChunks, { type: 'video/webm' });
-      console.log('Video size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
-      if (blob.size > 25 * 1024 * 1024) {
-        console.warn('Video too large (>25MB), skipping upload');
+      const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+      console.log('🎥 Video size:', sizeMB, 'MB');
+      // Apps Script POST has ~50MB limit including base64 overhead (~33% bigger)
+      // So actual video limit is ~37MB. We cap at 35MB to be safe.
+      if (blob.size > 35 * 1024 * 1024) {
+        console.error('❌ Video too large (' + sizeMB + ' MB, max 35MB). Skipping upload — record shorter exams or lower resolution.');
+        alert('Warning: Exam recording is too large to save (' + sizeMB + ' MB). Results will still be submitted.');
         resolve('');
         return;
       }

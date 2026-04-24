@@ -881,14 +881,19 @@ function stopCamera() {
   document.getElementById('cameraBox').style.display = 'none';
 }
 
-// Upload video to Drive via Apps Script — uses XHR for progress events
+// Upload video to Drive via Apps Script — uses XHR with progress, sends as text/plain (CORS-safe)
 function uploadVideoToDrive(onProgress) {
   return new Promise((resolve) => {
-    if (!videoChunks.length) { resolve(''); return; }
+    if (!videoChunks.length) {
+      console.warn('Video upload: no chunks');
+      resolve('');
+      return;
+    }
     try {
       const blob = new Blob(videoChunks, { type: 'video/webm' });
+      console.log('Video size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       if (blob.size > 25 * 1024 * 1024) {
-        console.warn('Video too large, skipping upload');
+        console.warn('Video too large (>25MB), skipping upload');
         resolve('');
         return;
       }
@@ -896,21 +901,43 @@ function uploadVideoToDrive(onProgress) {
         const payload = JSON.stringify({ type:'video', email:state.candidateEmail, name:state.candidateName, video:base64 });
         const xhr = new XMLHttpRequest();
         xhr.open('POST', SHEETS_URL);
+        // Send as text/plain to avoid CORS preflight (Apps Script Web Apps don't handle OPTIONS)
+        xhr.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable && onProgress) {
             onProgress(Math.round((e.loaded / e.total) * 100));
           }
         };
         xhr.onload = () => {
+          console.log('Video upload response:', xhr.status, xhr.responseText?.substring(0, 200));
           try {
             const data = JSON.parse(xhr.responseText);
-            resolve(data.videoUrl || '');
-          } catch(e) { resolve(''); }
+            if (data.status === 'success') {
+              console.log('Video uploaded:', data.videoUrl);
+              resolve(data.videoUrl || '');
+            } else {
+              console.warn('Video upload error:', data.message);
+              resolve('');
+            }
+          } catch(e) {
+            console.warn('Could not parse video response:', e);
+            // URL will still be saved by Apps Script to the sheet directly
+            resolve('');
+          }
         };
-        xhr.onerror = () => { console.warn('Video upload failed'); resolve(''); };
+        xhr.onerror = (e) => {
+          console.warn('Video upload network error:', e);
+          resolve('');
+        };
         xhr.send(payload);
-      }).catch(() => resolve(''));
-    } catch(err) { console.warn('Video upload failed:', err); resolve(''); }
+      }).catch(err => {
+        console.warn('Video base64 encoding failed:', err);
+        resolve('');
+      });
+    } catch(err) {
+      console.warn('Video upload failed:', err);
+      resolve('');
+    }
   });
 }
 

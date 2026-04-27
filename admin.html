@@ -244,6 +244,7 @@ const SHEETS_URL = "https://script.google.com/macros/s/AKfycbyCeC-hXJ30xrMtPlBxr
 
 let adminPassword = "";
 let allRows = [];
+let setSettings = {}; // per-set mark scheme: { A: {mcqMarks, codingMarks, scenarioMarks, passThreshold}, ... }
 
 // ===== Authentication =====
 function login() {
@@ -338,6 +339,7 @@ async function loadResults() {
       throw new Error(res.error);
     }
     allRows = res.rows || [];
+    setSettings = res.settings || {};
     populateSetFilter();
     render();
   } catch (err) {
@@ -409,6 +411,18 @@ function render() {
   }).join('');
 }
 
+// Parse legacy or new manual coding scores. Accepts: JSON array "[9,10]", single number, or empty.
+function parseManualCoding(raw) {
+  if (raw === undefined || raw === null || raw === '') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch(e) {
+    const n = parseFloat(raw);
+    return isNaN(n) ? [] : [n];
+  }
+}
+
 // ===== Detail modal =====
 function showDetail(idx) {
   const r = allRows[idx];
@@ -416,20 +430,29 @@ function showDetail(idx) {
   document.getElementById('modalTitle').textContent = r.Name || 'Unknown';
   document.getElementById('modalSub').textContent = `${r.Email || ''} · Set ${r.Set || '-'} · Submitted ${r.Timestamp || ''}`;
 
+  const rowNum = r._rowNumber;
+  const setName = String(r.Set || '').trim();
+  const cfg = setSettings[setName] || { mcqMarks: 1, codingMarks: 10, scenarioMarks: 5, passThreshold: 60 };
   const videoUrl = r['Video URL'] || '';
   const aiViolations = parseJson(r['AI Violations']) || [];
   const codingAnswers = parseJson(r['Coding Answers (JSON)']) || [];
+  const manualCodingArr = parseManualCoding(r['Manual Coding Scores (JSON)'] || r['Manual Coding Score (override)']);
   const qTimes = parseJson(r['Question Times']) || [];
 
   let html = `<div class="detail-grid">
-    <div class="detail-item"><div class="detail-label">Score</div><div class="detail-value">${r.Score || 0} / ${r['Total MCQ'] || 0}</div></div>
-    <div class="detail-item"><div class="detail-label">Percentage</div><div class="detail-value">${r.Percentage || '0%'}</div></div>
-    <div class="detail-item"><div class="detail-label">Result</div><div class="detail-value" style="color:${String(r.Result).toUpperCase()==='PASSED'?'var(--success)':'var(--danger)'}">${r.Result || '-'}</div></div>
+    <div class="detail-item"><div class="detail-label">MCQ Score</div><div class="detail-value">${r.Score || 0} / ${r['Total MCQ'] || 0}</div></div>
+    <div class="detail-item"><div class="detail-label">MCQ %</div><div class="detail-value">${r.Percentage || '0%'}</div></div>
+    <div class="detail-item"><div class="detail-label">Result (MCQ)</div><div class="detail-value" style="color:${String(r.Result).toUpperCase()==='PASSED'?'var(--success)':'var(--danger)'}">${r.Result || '-'}</div></div>
     <div class="detail-item"><div class="detail-label">Time Taken</div><div class="detail-value">${r['Time Taken'] || '-'}</div></div>
     <div class="detail-item"><div class="detail-label">Correct</div><div class="detail-value" style="color:var(--success)">${r.Correct || 0}</div></div>
     <div class="detail-item"><div class="detail-label">Wrong</div><div class="detail-value" style="color:var(--danger)">${r.Wrong || 0}</div></div>
     <div class="detail-item"><div class="detail-label">Skipped</div><div class="detail-value" style="color:var(--warning)">${r.Skipped || 0}</div></div>
     <div class="detail-item"><div class="detail-label">Violations</div><div class="detail-value" style="color:${(parseInt(r.Violations)||0)>0?'var(--danger)':'var(--text2)'}">${r.Violations || 0}</div></div>
+  </div>`;
+
+  // Live combined-score preview
+  html += `<div id="combinedPreview_${rowNum}" style="background:rgba(59,127,255,0.06);border:1px solid rgba(59,127,255,0.2);border-radius:var(--radius);padding:10px 14px;margin-bottom:1.5rem;font-size:13px;color:var(--accent2);">
+    Combined score (live): <strong id="combinedText_${rowNum}">— grade open-ended sections to compute —</strong>
   </div>`;
 
   // Video — embed Drive preview iframe directly in the modal
@@ -456,38 +479,93 @@ function showDetail(idx) {
     </div>`;
   }
 
-  // Coding
+  // Coding — admin grades each question manually (out of cfg.codingMarks)
   if (codingAnswers.length) {
     html += `<div class="section">
-      <div class="section-title">Coding Answers (${codingAnswers.length})</div>`;
+      <div class="section-title">Coding Answers (${codingAnswers.length}) — manually graded</div>`;
     codingAnswers.forEach((c, i) => {
+      const manualVal = (manualCodingArr[i] !== undefined && manualCodingArr[i] !== null) ? manualCodingArr[i] : '';
       html += `<div style="margin-bottom:1rem;">
-        <div style="font-size:13px;color:var(--text2);margin-bottom:4px;"><strong>Q${i+1}:</strong> ${escapeHtml(c.question || '')} <span style="color:var(--accent2);font-family:'DM Mono',monospace;">[${c.language}]</span></div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="flex:1;min-width:200px;"><strong>Q${i+1}:</strong> ${escapeHtml(c.question || '')} <span style="color:var(--accent2);font-family:'DM Mono',monospace;">[${c.language}]</span></span>
+          <span style="font-size:12px;white-space:nowrap;">
+            <span style="color:var(--text3);">Auto: ${c.suggestedScore}/${cfg.codingMarks}</span>
+            &nbsp;&nbsp;
+            Manual: <input id="codingScore_${rowNum}_${i}" type="number" min="0" max="${cfg.codingMarks}" step="0.5"
+              value="${manualVal}"
+              oninput="updateCombinedPreview(${rowNum}, ${codingAnswers.length})"
+              style="width:55px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace;"
+            /> / ${cfg.codingMarks}
+          </span>
+        </div>
         <div class="answer-box">${escapeHtml(c.answer || '(empty)')}</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:4px;">Keywords matched: ${c.matched}/${c.totalKeywords} · Suggested score: <strong>${c.suggestedScore}/10</strong></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Keywords matched: ${c.matched}/${c.totalKeywords}</div>
       </div>`;
     });
     html += `</div>`;
   }
 
-  // Scenarios & Project
-  if (r['Scenario 1']) html += `<div class="section"><div class="section-title">Scenario 1</div><div class="answer-box">${escapeHtml(r['Scenario 1'])}</div></div>`;
-  if (r['Scenario 2']) html += `<div class="section"><div class="section-title">Scenario 2</div><div class="answer-box">${escapeHtml(r['Scenario 2'])}</div></div>`;
-  if (r.Project) html += `<div class="section"><div class="section-title">Project</div><div class="answer-box">${escapeHtml(r.Project)}</div></div>`;
+  // Scenario 1 — admin grades manually (out of cfg.scenarioMarks)
+  if (r['Scenario 1']) {
+    const s1Val = (r['Scenario 1 Score'] !== undefined && r['Scenario 1 Score'] !== '' && r['Scenario 1 Score'] !== null) ? r['Scenario 1 Score'] : '';
+    html += `<div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Scenario 1 — manually graded</span>
+        <span style="font-size:12px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+          Score: <input id="s1Score_${rowNum}" type="number" min="0" max="${cfg.scenarioMarks}" step="0.5"
+            value="${s1Val}"
+            oninput="updateCombinedPreview(${rowNum}, ${codingAnswers.length})"
+            style="width:55px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace;"
+          /> / ${cfg.scenarioMarks}
+        </span>
+      </div>
+      <div class="answer-box">${escapeHtml(r['Scenario 1'])}</div>
+    </div>`;
+  }
 
-  // Action buttons row (certificate + reset)
+  // Scenario 2 — admin grades manually
+  if (r['Scenario 2']) {
+    const s2Val = (r['Scenario 2 Score'] !== undefined && r['Scenario 2 Score'] !== '' && r['Scenario 2 Score'] !== null) ? r['Scenario 2 Score'] : '';
+    html += `<div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Scenario 2 — manually graded</span>
+        <span style="font-size:12px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+          Score: <input id="s2Score_${rowNum}" type="number" min="0" max="${cfg.scenarioMarks}" step="0.5"
+            value="${s2Val}"
+            oninput="updateCombinedPreview(${rowNum}, ${codingAnswers.length})"
+            style="width:55px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace;"
+          /> / ${cfg.scenarioMarks}
+        </span>
+      </div>
+      <div class="answer-box">${escapeHtml(r['Scenario 2'])}</div>
+    </div>`;
+  }
+
+  // Project — read-only (not graded for certificate)
+  if (r.Project) {
+    html += `<div class="section">
+      <div class="section-title">Project <span style="font-size:10px;color:var(--text3);font-weight:400;">— not graded</span></div>
+      <div class="answer-box">${escapeHtml(r.Project)}</div>
+    </div>`;
+  }
+
+  // Action buttons row
   const resetFlag = String(r['Reset (YES to allow retake)'] || '').toUpperCase().trim();
   const isReset = resetFlag === 'YES';
+  const numCoding = codingAnswers.length;
   html += `<div class="cert-btn-row">`;
 
-  // Certificate button (only if PASSED)
-  if (String(r.Result).toUpperCase() === 'PASSED') {
-    const existingCert = r['Certificate URL'];
-    if (existingCert) {
-      html += `<a href="${escapeHtml(existingCert)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">📄 View Certificate</a>`;
-    }
-    html += `<button class="btn btn-success btn-sm" onclick="issueCertificate(${r._rowNumber})" id="certBtn_${r._rowNumber}">🎓 ${existingCert ? 'Resend' : 'Issue'} Certificate</button>`;
+  // Save Scores button (always shown if there's anything to grade)
+  if (numCoding > 0 || r['Scenario 1'] || r['Scenario 2']) {
+    html += `<button class="btn btn-primary btn-sm" onclick="saveScores(${r._rowNumber}, ${numCoding})" id="saveScoresBtn_${r._rowNumber}">💾 Save Scores</button>`;
   }
+
+  // Certificate button — gated by full grading
+  const existingCert = r['Certificate URL'];
+  if (existingCert) {
+    html += `<a href="${escapeHtml(existingCert)}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">📄 View Certificate</a>`;
+  }
+  html += `<button class="btn btn-success btn-sm" onclick="issueCertificate(${r._rowNumber})" id="certBtn_${r._rowNumber}">🎓 ${existingCert ? 'Resend' : 'Issue'} Certificate</button>`;
 
   // Reset button (always shown — allows retake)
   if (isReset) {
@@ -500,10 +578,130 @@ function showDetail(idx) {
 
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalBackdrop').classList.add('show');
+
+  // Compute initial preview
+  updateCombinedPreview(rowNum, numCoding);
 }
 
 function closeModal() {
   document.getElementById('modalBackdrop').classList.remove('show');
+}
+
+// Live combined-score preview as admin types scores
+function updateCombinedPreview(rowNum, numCoding) {
+  // Find current open modal's row
+  const r = allRows.find(row => row._rowNumber === rowNum);
+  if (!r) return;
+  const setName = String(r.Set || '').trim();
+  const cfg = setSettings[setName] || { mcqMarks: 1, codingMarks: 10, scenarioMarks: 5, passThreshold: 60 };
+
+  const mcqCorrect = parseFloat(r.Score) || 0;
+  const totalMCQ = parseFloat(r['Total MCQ']) || 0;
+  const mcqEarned = mcqCorrect * cfg.mcqMarks;
+  const mcqMax = totalMCQ * cfg.mcqMarks;
+
+  let codingEarned = 0, codingMax = numCoding * cfg.codingMarks;
+  let codingComplete = true;
+  for (let i = 0; i < numCoding; i++) {
+    const el = document.getElementById('codingScore_' + rowNum + '_' + i);
+    const v = el ? el.value : '';
+    if (v === '') { codingComplete = false; }
+    else { codingEarned += parseFloat(v) || 0; }
+  }
+
+  const s1El = document.getElementById('s1Score_' + rowNum);
+  const s2El = document.getElementById('s2Score_' + rowNum);
+  const hasS1 = !!r['Scenario 1'];
+  const hasS2 = !!r['Scenario 2'];
+  const s1Val = s1El ? s1El.value : '';
+  const s2Val = s2El ? s2El.value : '';
+  const s1Earned = parseFloat(s1Val) || 0;
+  const s2Earned = parseFloat(s2Val) || 0;
+  const s1Max = hasS1 ? cfg.scenarioMarks : 0;
+  const s2Max = hasS2 ? cfg.scenarioMarks : 0;
+  const scenariosComplete = (!hasS1 || s1Val !== '') && (!hasS2 || s2Val !== '');
+
+  const totalEarned = mcqEarned + codingEarned + s1Earned + s2Earned;
+  const totalMax = mcqMax + codingMax + s1Max + s2Max;
+  const pct = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 0;
+  const allComplete = codingComplete && scenariosComplete;
+
+  const textEl = document.getElementById('combinedText_' + rowNum);
+  if (!textEl) return;
+  if (allComplete) {
+    const passes = pct >= cfg.passThreshold;
+    textEl.innerHTML = `${totalEarned} / ${totalMax} &nbsp;•&nbsp; <strong>${pct}%</strong> &nbsp;·&nbsp; <span style="color:${passes ? 'var(--success)' : 'var(--danger)'}">${passes ? 'PASS' : 'FAIL'}</span> (threshold ${cfg.passThreshold}%)`;
+  } else {
+    const missing = [];
+    if (!codingComplete) missing.push('coding');
+    if (!scenariosComplete) missing.push('scenarios');
+    textEl.innerHTML = `<span style="color:var(--text2)">— grade ${missing.join(' + ')} to compute final score —</span>`;
+  }
+
+  // Gate the Issue Certificate button
+  const certBtn = document.getElementById('certBtn_' + rowNum);
+  if (certBtn) {
+    if (!allComplete) {
+      certBtn.disabled = true;
+      certBtn.style.opacity = '0.5';
+      certBtn.style.cursor = 'not-allowed';
+      certBtn.title = 'Grade all open-ended sections + click Save Scores first';
+    } else {
+      certBtn.disabled = false;
+      certBtn.style.opacity = '';
+      certBtn.style.cursor = '';
+      certBtn.title = '';
+    }
+  }
+}
+
+// Save admin-entered scores (scenarios + per-coding) back to the sheet
+async function saveScores(rowNumber, numCoding) {
+  const btn = document.getElementById('saveScoresBtn_' + rowNumber);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  const s1El = document.getElementById('s1Score_' + rowNumber);
+  const s2El = document.getElementById('s2Score_' + rowNumber);
+  const s1 = s1El ? s1El.value : '';
+  const s2 = s2El ? s2El.value : '';
+
+  const codingScores = [];
+  for (let i = 0; i < numCoding; i++) {
+    const el = document.getElementById('codingScore_' + rowNumber + '_' + i);
+    const v = el ? el.value : '';
+    codingScores.push(v === '' ? null : parseFloat(v));
+  }
+  const codingJson = JSON.stringify(codingScores);
+
+  try {
+    const url = SHEETS_URL + '?action=saveScores'
+      + '&password=' + encodeURIComponent(adminPassword)
+      + '&row=' + rowNumber
+      + '&s1=' + encodeURIComponent(s1)
+      + '&s2=' + encodeURIComponent(s2)
+      + '&coding=' + encodeURIComponent(codingJson);
+    const res = await jsonpRequest(url);
+    if (res.success) {
+      if (btn) { btn.textContent = '✓ Saved'; btn.style.background = 'var(--success)'; }
+      // Update the in-memory row so subsequent updates reflect the new state
+      const row = allRows.find(rw => rw._rowNumber === rowNumber);
+      if (row) {
+        if (s1 !== '') row['Scenario 1 Score'] = parseFloat(s1);
+        if (s2 !== '') row['Scenario 2 Score'] = parseFloat(s2);
+        row['Manual Coding Scores (JSON)'] = codingJson;
+      }
+      setTimeout(() => {
+        if (btn) { btn.textContent = '💾 Save Scores'; btn.style.background = ''; btn.disabled = false; }
+      }, 1500);
+      updateCombinedPreview(rowNumber, numCoding);
+    } else {
+      if (btn) { btn.textContent = '💾 Save Scores'; btn.disabled = false; }
+      alert('Failed to save scores: ' + (res.error || 'unknown error'));
+    }
+  } catch(err) {
+    if (btn) { btn.textContent = '💾 Save Scores'; btn.disabled = false; }
+    alert('Error saving scores: ' + err.message);
+  }
 }
 
 async function issueCertificate(rowNumber) {

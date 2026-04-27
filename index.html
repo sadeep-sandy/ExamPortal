@@ -942,30 +942,43 @@ async function uploadVideoToDrive(onProgress) {
     if (!urlRes || !urlRes.uploadUrl) {
       throw new Error(urlRes && urlRes.error ? urlRes.error : 'Failed to get upload URL');
     }
+    const filename = urlRes.filename || '';
 
     // Step 2 — PUT the raw blob directly to Drive (real progress via xhr.upload.onprogress)
-    const fileId = await putToDrive(urlRes.uploadUrl, blob, onProgress);
+    // The PUT request returns 200 OK on success, but the browser may block the response
+    // body due to CORS. The file IS uploaded either way — we just can't read the fileId
+    // from the response. We'll fall back to searching by filename in step 3.
+    let fileId = null;
+    try {
+      fileId = await putToDrive(urlRes.uploadUrl, blob, onProgress);
+      console.log('✅ Video PUT complete, fileId:', fileId);
+    } catch (putErr) {
+      console.warn('PUT threw (likely CORS) — file should still be in Drive, will look up by filename:', putErr.message);
+    }
 
     // Step 3 — JSONP call so Apps Script can write the URL into the Results sheet.
-    // JSONP gives us confirmation (vs. fire-and-forget POST which we can't verify).
+    // We send BOTH fileId (if known) AND filename. Backend tries fileId first,
+    // then falls back to searching the ExamVideos folder by filename.
     try {
       const recordRes = await jsonpRetry(
         SHEETS_URL + '?action=recordVideoLink' +
           '&email=' + encodeURIComponent(state.candidateEmail) +
-          '&fileId=' + encodeURIComponent(fileId),
+          (fileId ? '&fileId=' + encodeURIComponent(fileId) : '') +
+          '&filename=' + encodeURIComponent(filename),
         3
       );
       if (recordRes && recordRes.error) {
         console.warn('Video URL record warning:', recordRes.error);
-      } else {
+      } else if (recordRes && recordRes.videoUrl) {
         console.log('✅ Video URL written to sheet:', recordRes.videoUrl);
+        if (recordRes.warning) console.warn('  (with warning:', recordRes.warning + ')');
+        return recordRes.videoUrl;
       }
     } catch (recordErr) {
       console.warn('Video URL record failed (file is in Drive but URL not written to sheet):', recordErr);
     }
 
-    console.log('✅ Video uploaded to Drive, fileId:', fileId);
-    return 'https://drive.google.com/file/d/' + fileId + '/view';
+    return fileId ? ('https://drive.google.com/file/d/' + fileId + '/view') : '';
   } catch (err) {
     console.error('❌ Video upload failed:', err);
     return '';

@@ -588,12 +588,39 @@ function buildRandomizedQuestions(setId) {
   return [...shuffledMCQs, ...shuffle(coding), ...shuffle(scenarios), ...projects];
 }
 
-function startExam() {
+async function startExam() {
   const name = document.getElementById('candidateName').value.trim();
   const email = verifiedEmail;
   const set = document.getElementById('setSelector').value;
   if (!name||!email||!set){alert('Please fill in your name and select a test set.');return;}
   if (!QUESTIONS[set] || QUESTIONS[set].length === 0) { alert('No questions found for this set.'); return; }
+
+  // ===== MANDATORY: camera + mic permission BEFORE the exam starts =====
+  // Try to acquire the stream first. If denied, show error and DO NOT start the exam.
+  const beginBtn = document.querySelector('#step3Exam .btn-primary');
+  if (beginBtn) { beginBtn.disabled = true; beginBtn.textContent = 'Requesting camera access...'; }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { width:320, height:240, facingMode:'user' },
+      audio: true
+    });
+  } catch(err) {
+    if (beginBtn) { beginBtn.disabled = false; beginBtn.textContent = 'Begin Exam'; }
+    showAuthError('Camera and microphone access is REQUIRED to start the exam. Please allow them in your browser, then click Begin Exam again.');
+    return;
+  }
+  // Defensive: confirm both video AND audio tracks were granted
+  const hasVideo = camStream.getVideoTracks().length > 0;
+  const hasAudio = camStream.getAudioTracks().length > 0;
+  if (!hasVideo || !hasAudio) {
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+    if (beginBtn) { beginBtn.disabled = false; beginBtn.textContent = 'Begin Exam'; }
+    showAuthError((!hasVideo ? 'Camera' : 'Microphone') + ' was not granted. Both are required to start the exam.');
+    return;
+  }
+  if (beginBtn) { beginBtn.textContent = 'Begin Exam'; }
+
   state.candidateName=name; state.candidateEmail=email; state.set=set;
   state.questions=buildRandomizedQuestions(set); state.startTime=Date.now();
   state.totalMCQ = state.questions.filter(q=>q.type==='mcq').length;
@@ -611,7 +638,7 @@ function startExam() {
   updateTimerDisplay();
   showScreen('examScreen'); buildQGrid(); renderQuestion(); startTimer();
   saveExamState(); // capture initial state for resume
-  // Start camera + mic + video recording + face detection. Then fullscreen. Then proctoring.
+  // Start proctoring (uses the camStream we already acquired above)
   setupProctoring();
 }
 
@@ -764,11 +791,14 @@ let faceApiReady = false;
 
 async function startCamera() {
   try {
-    // Request camera + mic together (one permission prompt)
-    camStream = await navigator.mediaDevices.getUserMedia({
-      video: { width:320, height:240, facingMode:'user' },
-      audio: true
-    });
+    // camStream is normally already acquired in startExam() before the exam begins.
+    // For resume-after-crash flow, it may not exist yet — request it here as a fallback.
+    if (!camStream) {
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { width:320, height:240, facingMode:'user' },
+        audio: true
+      });
+    }
     const video = document.getElementById('camVideo');
     video.srcObject = camStream;
     document.getElementById('cameraBox').style.display = 'block';
@@ -916,16 +946,23 @@ async function uploadVideoToDrive(onProgress) {
     // Step 2 — PUT the raw blob directly to Drive (real progress via xhr.upload.onprogress)
     const fileId = await putToDrive(urlRes.uploadUrl, blob, onProgress);
 
-    // Step 3 — fire-and-forget POST so Apps Script can write the URL into the Results sheet
-    fetch(SHEETS_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify({
-        type: 'videoLink',
-        email: state.candidateEmail,
-        fileId: fileId
-      })
-    }).catch(() => { /* ignore fire-and-forget errors */ });
+    // Step 3 — JSONP call so Apps Script can write the URL into the Results sheet.
+    // JSONP gives us confirmation (vs. fire-and-forget POST which we can't verify).
+    try {
+      const recordRes = await jsonpRetry(
+        SHEETS_URL + '?action=recordVideoLink' +
+          '&email=' + encodeURIComponent(state.candidateEmail) +
+          '&fileId=' + encodeURIComponent(fileId),
+        3
+      );
+      if (recordRes && recordRes.error) {
+        console.warn('Video URL record warning:', recordRes.error);
+      } else {
+        console.log('✅ Video URL written to sheet:', recordRes.videoUrl);
+      }
+    } catch (recordErr) {
+      console.warn('Video URL record failed (file is in Drive but URL not written to sheet):', recordErr);
+    }
 
     console.log('✅ Video uploaded to Drive, fileId:', fileId);
     return 'https://drive.google.com/file/d/' + fileId + '/view';
